@@ -35,8 +35,13 @@ export default function DashboardLayout({
         className="flex items-center justify-between px-6 py-4 border-b"
         style={{ background: "var(--surface)", borderColor: "var(--border)" }}
       >
-        <Link href="/dashboard" className="font-bold text-lg">
-          The <span style={{ color: "var(--accent)" }}>Offseason</span>
+        <Link
+          href="/"
+          className="font-bold text-lg"
+          style={{ display: "flex", alignItems: "center", gap: 8, textDecoration: "none", color: "var(--foreground)" }}
+        >
+          <img src="/logo.png" alt="" style={{ width: 28, height: 28, borderRadius: 7 }} />
+          The Offseason
         </Link>
         <div className="flex items-center gap-4">
           <span className="text-sm" style={{ color: "var(--muted)" }}>
@@ -44,7 +49,7 @@ export default function DashboardLayout({
           </span>
           <button
             onClick={() => signOut(auth).then(() => router.push("/login"))}
-            className="text-sm px-3 py-1 rounded-lg transition-colors hover:opacity-80"
+            className="cursor-pointer text-sm px-3 py-1 rounded-lg transition-colors hover:opacity-80"
             style={{ background: "var(--surface-2)", color: "var(--muted)" }}
           >
             Sign out

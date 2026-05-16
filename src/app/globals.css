@@ -4,8 +4,9 @@
   --background: #0f1117;
   --surface: #1a1d27;
   --surface-2: #242736;
-  --accent: #3b82f6;
-  --accent-hover: #2563eb;
+  --accent: #2dd4bf;
+  --accent-hover: #14b8a6;
+  --accent-dim: rgba(45, 212, 191, 0.12);
   --foreground: #f1f5f9;
   --muted: #94a3b8;
   --border: #2e3347;

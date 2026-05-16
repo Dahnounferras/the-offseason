@@ -7,6 +7,7 @@ export interface League {
   scoringRules: { win: number; tie: number; loss: number };
   isPublic: boolean;
   createdAt: number;
+  status?: "active" | "ended" | "deleted";
 }
 
 export interface Team {
@@ -20,7 +21,9 @@ export interface Team {
 
 export interface Player {
   id: string;
-  name: string;
+  firstName: string;
+  lastName: string;
+  jerseyNumber?: number;
   teamId: string;
   stats: Record<string, number>;
 }

@@ -1,14 +1,23 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { signInWithPopup, GoogleAuthProvider } from "firebase/auth";
 import { auth } from "@/lib/firebase";
+import { useAuth } from "@/hooks/useAuth";
 
 export default function LoginPage() {
   const router = useRouter();
+  const { user, loading: authLoading } = useAuth();
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!authLoading && user) {
+      router.replace("/dashboard");
+    }
+  }, [user, authLoading, router]);
 
   async function handleGoogleSignIn() {
     setLoading(true);
@@ -24,6 +33,24 @@ export default function LoginPage() {
 
   return (
     <main className="flex items-center justify-center min-h-screen px-6">
+      <Link
+        href="/"
+        style={{
+          position: "absolute",
+          top: 20,
+          left: 24,
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+          textDecoration: "none",
+          color: "var(--foreground)",
+          fontWeight: 700,
+          fontSize: "0.95rem",
+        }}
+      >
+        <img src="/logo.png" alt="" style={{ width: 28, height: 28, borderRadius: 7 }} />
+        The Offseason
+      </Link>
       <div
         className="w-full max-w-sm p-8 rounded-2xl"
         style={{ background: "var(--surface)", border: "1px solid var(--border)" }}
@@ -38,7 +65,7 @@ export default function LoginPage() {
         <button
           onClick={handleGoogleSignIn}
           disabled={loading}
-          className="w-full flex items-center justify-center gap-3 py-3 rounded-lg font-semibold transition-colors disabled:opacity-60"
+          className="cursor-pointer w-full flex items-center justify-center gap-3 py-3 rounded-lg font-semibold transition-colors disabled:opacity-60"
           style={{ background: "var(--surface-2)", border: "1px solid var(--border)" }}
         >
           <svg width="18" height="18" viewBox="0 0 18 18" fill="none">

@@ -118,7 +118,7 @@ export default function GamesPage() {
             <button
               onClick={handleSubmit}
               disabled={saving}
-              className="px-5 py-2 rounded-lg text-sm font-semibold disabled:opacity-50"
+              className="cursor-pointer px-5 py-2 rounded-lg text-sm font-semibold disabled:opacity-50"
               style={{ background: "var(--accent)", color: "#fff" }}
             >
               {saving ? "Saving…" : "Save Result"}
