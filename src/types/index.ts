@@ -37,9 +37,13 @@ export interface Game {
   id: string;
   homeTeamId: string;
   awayTeamId: string;
-  homeScore: number;
-  awayScore: number;
-  playedAt: number;
+  gameNumber?: number;
+  status?: "scheduled" | "played";
+  homeScore?: number;
+  awayScore?: number;
+  homeSportsmanship?: number;
+  awaySportsmanship?: number;
+  playedAt?: number;
   statLines: StatLine[];
 }
 

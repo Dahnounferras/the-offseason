@@ -4,33 +4,10 @@ import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { getLeague, getTeams, getGames, addTeam, getBracket, getPlayers, addPlayer, endLeague, deleteLeague } from "@/lib/firestore/leagues";
+import { getLeague, getTeams, getGames, addTeam, getBracket, getPlayers, addPlayer, updatePlayer, scheduleGames, endLeague, deleteLeague, reactivateLeague } from "@/lib/firestore/leagues";
 import type { League, Team, Game, Bracket, Player } from "@/types";
-
-function computeStandings(teams: Team[], games: Game[], scoringRules: League["scoringRules"]) {
-  const map: Record<string, { team: Team; pts: number; w: number; l: number; t: number; gp: number }> = {};
-  for (const t of teams) {
-    map[t.id] = { team: t, pts: 0, w: 0, l: 0, t: 0, gp: 0 };
-  }
-  for (const g of games) {
-    const home = map[g.homeTeamId];
-    const away = map[g.awayTeamId];
-    if (!home || !away) continue;
-    home.gp++;
-    away.gp++;
-    if (g.homeScore > g.awayScore) {
-      home.w++; home.pts += scoringRules.win;
-      away.l++; away.pts += scoringRules.loss;
-    } else if (g.awayScore > g.homeScore) {
-      away.w++; away.pts += scoringRules.win;
-      home.l++; home.pts += scoringRules.loss;
-    } else {
-      home.t++; home.pts += scoringRules.tie;
-      away.t++; away.pts += scoringRules.tie;
-    }
-  }
-  return Object.values(map).sort((a, b) => b.pts - a.pts || b.w - a.w);
-}
+import { generateSchedule } from "@/lib/schedule";
+import { computeStandings } from "@/lib/standings";
 
 const CARD_H = 80;
 const MATCH_GAP = 24;
@@ -76,8 +53,13 @@ export default function LeaguePage() {
   const [players, setPlayers] = useState<Player[]>([]);
   const [playerForm, setPlayerForm] = useState({ firstName: "", lastName: "", jerseyNumber: "" });
   const [addingPlayer, setAddingPlayer] = useState(false);
+  const [editingPlayer, setEditingPlayer] = useState<Player | null>(null);
+  const [editForm, setEditForm] = useState({ firstName: "", lastName: "", jerseyNumber: "" });
+  const [savingPlayer, setSavingPlayer] = useState(false);
+  const [starting, setStarting] = useState(false);
   const [showEndModal, setShowEndModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [showReactivateModal, setShowReactivateModal] = useState(false);
   const [actioning, setActioning] = useState(false);
 
   useEffect(() => {
@@ -109,17 +91,63 @@ export default function LeaguePage() {
   async function handleAddPlayer() {
     if (!rosterTeam || !playerForm.firstName.trim() || !playerForm.lastName.trim()) return;
     setAddingPlayer(true);
-    await addPlayer(id, rosterTeam.id, {
-      firstName: playerForm.firstName.trim(),
-      lastName: playerForm.lastName.trim(),
-      jerseyNumber: playerForm.jerseyNumber ? Number(playerForm.jerseyNumber) : undefined,
-      teamId: rosterTeam.id,
-      stats: {},
-    });
-    const updated = await getPlayers(id, rosterTeam.id);
-    setPlayers(updated);
-    setPlayerForm({ firstName: "", lastName: "", jerseyNumber: "" });
-    setAddingPlayer(false);
+    try {
+      const playerData: Parameters<typeof addPlayer>[2] = {
+        firstName: playerForm.firstName.trim(),
+        lastName: playerForm.lastName.trim(),
+        teamId: rosterTeam.id,
+        stats: {},
+      };
+      if (playerForm.jerseyNumber.trim()) {
+        playerData.jerseyNumber = Number(playerForm.jerseyNumber);
+      }
+      await addPlayer(id, rosterTeam.id, playerData);
+      const updated = await getPlayers(id, rosterTeam.id);
+      setPlayers(updated);
+      setPlayerForm({ firstName: "", lastName: "", jerseyNumber: "" });
+    } finally {
+      setAddingPlayer(false);
+    }
+  }
+
+  async function handleSavePlayer() {
+    if (!rosterTeam || !editingPlayer || !editForm.firstName.trim() || !editForm.lastName.trim()) return;
+    setSavingPlayer(true);
+    try {
+      const clearJersey = !editForm.jerseyNumber.trim() && editingPlayer.jerseyNumber !== undefined;
+      const data: Parameters<typeof updatePlayer>[3] = {
+        firstName: editForm.firstName.trim(),
+        lastName: editForm.lastName.trim(),
+      };
+      if (editForm.jerseyNumber.trim()) {
+        data.jerseyNumber = Number(editForm.jerseyNumber);
+      }
+      await updatePlayer(id, rosterTeam.id, editingPlayer.id, data, clearJersey);
+      setPlayers((prev) =>
+        prev.map((p) => {
+          if (p.id !== editingPlayer.id) return p;
+          const next = { ...p, ...data };
+          if (clearJersey) delete next.jerseyNumber;
+          return next;
+        })
+      );
+      setEditingPlayer(null);
+    } finally {
+      setSavingPlayer(false);
+    }
+  }
+
+  async function handleStartLeague() {
+    if (!league || teams.length < 2) return;
+    setStarting(true);
+    try {
+      const matchups = generateSchedule(teams.map((t) => t.id), league.season.totalGames);
+      await scheduleGames(id, matchups.map((m, i) => ({ ...m, gameNumber: i + 1 })));
+      const updated = await getGames(id);
+      setGames(updated);
+    } finally {
+      setStarting(false);
+    }
   }
 
   async function handleEndSeason() {
@@ -134,6 +162,14 @@ export default function LeaguePage() {
     router.push("/dashboard");
   }
 
+  async function handleReactivate() {
+    setActioning(true);
+    await reactivateLeague(id);
+    setLeague((l) => l ? { ...l, status: "active" } : l);
+    setActioning(false);
+    setShowReactivateModal(false);
+  }
+
   if (!league) {
     return <div className="flex items-center justify-center py-20" style={{ color: "var(--muted)" }}>Loading…</div>;
   }
@@ -146,110 +182,126 @@ export default function LeaguePage() {
         <div className="text-sm mb-1" style={{ color: "var(--muted)" }}>
           <Link href="/dashboard" className="hover:underline">My Leagues</Link> / {league.name}
         </div>
-        <div className="flex items-center justify-between">
-          <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-2xl font-bold">{league.name}</h1>
-              {league.status === "ended" && (
-                <span
-                  className="text-xs font-semibold px-2 py-1 rounded-md"
-                  style={{ background: "var(--surface-2)", color: "var(--muted)", border: "1px solid var(--border)" }}
-                >
-                  Season Ended
-                </span>
+        <div className="flex items-start justify-between gap-6">
+          {/* Left: title + metadata */}
+          <div className="flex flex-col gap-1">
+            <h1 className="text-2xl font-bold">{league.name}</h1>
+            {league.status === "ended" && (
+              <span
+                className="text-xs font-semibold px-2 py-0.5 rounded-md self-start"
+                style={{ background: "var(--surface-2)", color: "var(--muted)", border: "1px solid var(--border)" }}
+              >
+                Season Ended
+              </span>
+            )}
+            <p className="text-sm" style={{ color: "var(--muted)" }}>
+              <span style={{ color: "var(--accent)" }}>{league.sport}</span>
+              {games.length > 0 && (
+                <> &bull; {games.filter((g) => g.status === "played" || !g.status).length} / {league.season.totalGames} games played</>
               )}
-            </div>
-            <span className="text-sm" style={{ color: "var(--accent)" }}>{league.sport}</span>
+            </p>
           </div>
-          <div className="flex gap-2 flex-wrap items-center">
-            <Link
-              href={`/leagues/${id}/games`}
-              className="px-4 py-2 rounded-lg text-sm font-semibold"
-              style={{ background: "var(--surface-2)", color: "var(--foreground)", border: "1px solid var(--border)" }}
-            >
-              Games
-            </Link>
-            <div style={{ position: "relative", display: "inline-block" }} className="group">
-              {teams.length < 3 ? (
-                <>
-                  <button
-                    disabled
-                    className="px-4 py-2 rounded-lg text-sm font-semibold"
-                    style={{ background: "var(--surface-2)", color: "var(--muted)", border: "1px solid var(--border)", cursor: "not-allowed", opacity: 0.5 }}
-                  >
-                    Generate Tournament Bracket
-                  </button>
-                  <div
-                    className="absolute bottom-full left-1/2 mb-2 hidden group-hover:block"
-                    style={{
-                      transform: "translateX(-50%)",
-                      background: "var(--surface-2)",
-                      border: "1px solid var(--border)",
-                      borderRadius: 6,
-                      padding: "6px 10px",
-                      fontSize: "0.75rem",
-                      color: "var(--muted)",
-                      whiteSpace: "nowrap",
-                      pointerEvents: "none",
-                      zIndex: 10,
-                    }}
-                  >
-                    At least 3 teams required
-                  </div>
-                </>
-              ) : bracket ? (
-                <>
-                  <button
-                    disabled
-                    className="px-4 py-2 rounded-lg text-sm font-semibold"
-                    style={{ background: "var(--surface-2)", color: "var(--muted)", border: "1px solid var(--border)", cursor: "not-allowed", opacity: 0.5 }}
-                  >
-                    Generate Tournament Bracket
-                  </button>
-                  <div
-                    className="absolute bottom-full left-1/2 mb-2 hidden group-hover:block"
-                    style={{
-                      transform: "translateX(-50%)",
-                      background: "var(--surface-2)",
-                      border: "1px solid var(--border)",
-                      borderRadius: 6,
-                      padding: "6px 10px",
-                      fontSize: "0.75rem",
-                      color: "var(--muted)",
-                      whiteSpace: "nowrap",
-                      pointerEvents: "none",
-                      zIndex: 10,
-                    }}
-                  >
-                    Delete the existing bracket to generate a new one
-                  </div>
-                </>
-              ) : (
-                <Link
-                  href={`/leagues/${id}/bracket`}
-                  className="inline-flex items-center px-4 py-2 rounded-lg text-sm font-semibold"
+
+          {/* Right: two rows of buttons */}
+          <div className="flex flex-col items-end gap-2 shrink-0">
+            {/* Row 1: primary actions */}
+            <div className="flex gap-2 items-center">
+              {games.length === 0 && league.status !== "ended" && teams.length >= 2 && (
+                <button
+                  onClick={handleStartLeague}
+                  disabled={starting}
+                  className="cursor-pointer px-4 py-2 rounded-lg text-sm font-semibold disabled:opacity-50"
                   style={{ background: "var(--accent)", color: "#000" }}
                 >
-                  Generate Tournament Bracket
-                </Link>
+                  {starting ? "Generating…" : "Start League"}
+                </button>
               )}
-            </div>
-            {league.status !== "ended" && (
-              <button
-                onClick={() => setShowEndModal(true)}
-                className="cursor-pointer px-4 py-2 rounded-lg text-sm font-semibold"
-                style={{ background: "var(--surface-2)", color: "var(--tie)", border: "1px solid var(--tie)" }}
+              <Link
+                href={`/leagues/${id}/games`}
+                className="px-4 py-2 rounded-lg text-sm font-semibold"
+                style={{ background: "var(--surface-2)", color: "var(--foreground)", border: "1px solid var(--border)" }}
               >
-                End Season
+                Games
+              </Link>
+              <div style={{ position: "relative", display: "inline-block" }} className="group">
+                {league.status === "ended" ? (
+                  <>
+                    <button
+                      disabled
+                      className="px-4 py-2 rounded-lg text-sm font-semibold"
+                      style={{ background: "var(--surface-2)", color: "var(--muted)", border: "1px solid var(--border)", cursor: "not-allowed", opacity: 0.5 }}
+                    >
+                      Generate Tournament Bracket
+                    </button>
+                    <div className="absolute bottom-full left-1/2 mb-2 hidden group-hover:block" style={{ transform: "translateX(-50%)", background: "var(--surface-2)", border: "1px solid var(--border)", borderRadius: 6, padding: "6px 10px", fontSize: "0.75rem", color: "var(--muted)", whiteSpace: "nowrap", pointerEvents: "none", zIndex: 10 }}>
+                      Reactivate the league to generate a bracket
+                    </div>
+                  </>
+                ) : teams.length < 3 ? (
+                  <>
+                    <button
+                      disabled
+                      className="px-4 py-2 rounded-lg text-sm font-semibold"
+                      style={{ background: "var(--surface-2)", color: "var(--muted)", border: "1px solid var(--border)", cursor: "not-allowed", opacity: 0.5 }}
+                    >
+                      Generate Tournament Bracket
+                    </button>
+                    <div className="absolute bottom-full left-1/2 mb-2 hidden group-hover:block" style={{ transform: "translateX(-50%)", background: "var(--surface-2)", border: "1px solid var(--border)", borderRadius: 6, padding: "6px 10px", fontSize: "0.75rem", color: "var(--muted)", whiteSpace: "nowrap", pointerEvents: "none", zIndex: 10 }}>
+                      At least 3 teams required
+                    </div>
+                  </>
+                ) : bracket ? (
+                  <>
+                    <button
+                      disabled
+                      className="px-4 py-2 rounded-lg text-sm font-semibold"
+                      style={{ background: "var(--surface-2)", color: "var(--muted)", border: "1px solid var(--border)", cursor: "not-allowed", opacity: 0.5 }}
+                    >
+                      Generate Tournament Bracket
+                    </button>
+                    <div className="absolute bottom-full left-1/2 mb-2 hidden group-hover:block" style={{ transform: "translateX(-50%)", background: "var(--surface-2)", border: "1px solid var(--border)", borderRadius: 6, padding: "6px 10px", fontSize: "0.75rem", color: "var(--muted)", whiteSpace: "nowrap", pointerEvents: "none", zIndex: 10 }}>
+                      Delete the existing bracket to generate a new one
+                    </div>
+                  </>
+                ) : (
+                  <Link
+                    href={`/leagues/${id}/bracket`}
+                    className="inline-flex items-center px-4 py-2 rounded-lg text-sm font-semibold"
+                    style={{ background: "var(--accent)", color: "#000" }}
+                  >
+                    Generate Tournament Bracket
+                  </Link>
+                )}
+              </div>
+            </div>
+
+            {/* Row 2: secondary / destructive actions */}
+            <div className="flex gap-2 items-center">
+              {league.status === "ended" ? (
+                <button
+                  onClick={() => setShowReactivateModal(true)}
+                  className="cursor-pointer px-3 py-1.5 rounded-lg text-xs font-semibold"
+                  style={{ background: "var(--surface-2)", color: "var(--accent)", border: "1px solid var(--accent)" }}
+                >
+                  Reactivate League
+                </button>
+              ) : (
+                <button
+                  onClick={() => setShowEndModal(true)}
+                  className="cursor-pointer px-3 py-1.5 rounded-lg text-xs font-semibold"
+                  style={{ background: "var(--surface-2)", color: "var(--tie)", border: "1px solid var(--tie)" }}
+                >
+                  End Season
+                </button>
+              )}
+              <button
+                onClick={() => setShowDeleteModal(true)}
+                className="cursor-pointer px-3 py-1.5 rounded-lg text-xs font-semibold"
+                style={{ background: "var(--surface-2)", color: "var(--loss)", border: "1px solid var(--loss)" }}
+              >
+                Delete League
               </button>
-            )}
-            <button
-              onClick={() => setShowDeleteModal(true)}
-              className="cursor-pointer px-4 py-2 rounded-lg text-sm font-semibold"
-              style={{ background: "var(--surface-2)", color: "var(--loss)", border: "1px solid var(--loss)" }}
-            >
-              Delete League
-            </button>
+            </div>
           </div>
         </div>
       </div>
@@ -268,12 +320,15 @@ export default function LeaguePage() {
                   <th className="px-4 py-3 text-center">L</th>
                   <th className="px-4 py-3 text-center">T</th>
                   <th className="px-4 py-3 text-center font-bold" style={{ color: "var(--accent)" }}>PTS</th>
+                  <th className="px-4 py-3 text-center">PF</th>
+                  <th className="px-4 py-3 text-center">PA</th>
+                  <th className="px-4 py-3 text-center">RTG</th>
                 </tr>
               </thead>
               <tbody>
                 {standings.length === 0 && (
                   <tr>
-                    <td colSpan={7} className="text-center py-8" style={{ color: "var(--muted)" }}>
+                    <td colSpan={10} className="text-center py-8" style={{ color: "var(--muted)" }}>
                       No teams yet. Add teams below.
                     </td>
                   </tr>
@@ -290,6 +345,11 @@ export default function LeaguePage() {
                     <td className="px-4 py-3 text-center" style={{ color: "var(--loss)" }}>{row.l}</td>
                     <td className="px-4 py-3 text-center" style={{ color: "var(--tie)" }}>{row.t}</td>
                     <td className="px-4 py-3 text-center font-bold" style={{ color: "var(--accent)" }}>{row.pts}</td>
+                    <td className="px-4 py-3 text-center" style={{ color: "var(--muted)" }}>{row.pf}</td>
+                    <td className="px-4 py-3 text-center" style={{ color: "var(--muted)" }}>{row.pa}</td>
+                    <td className="px-4 py-3 text-center" style={{ color: "var(--muted)" }}>
+                      {row.sportCount > 0 ? (row.sportSum / row.sportCount).toFixed(1) : "—"}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -364,7 +424,7 @@ export default function LeaguePage() {
               <div>
                 <h2 className="font-semibold text-lg">Current Tournament Bracket</h2>
                 <p className="text-xs mt-0.5" style={{ color: "var(--muted)" }}>
-                  Generated {new Date(bracket.generatedAt).toLocaleDateString()} · Click a team to advance them
+                  Generated {new Date(bracket.generatedAt).toLocaleDateString()} · Open full bracket view to advance teams
                 </p>
               </div>
               <Link
@@ -391,11 +451,16 @@ export default function LeaguePage() {
                         }}>
                           {bracketRoundLabel(rIdx, bracket.rounds.length)}
                         </div>
-                        <div style={{ position: "relative", width: ROUND_W, height: totalHeight }}>
+                        <div style={{ position: "relative", width: ROUND_W, height: totalHeight + 1 }}>
                           {round.map((matchup, mIdx) => {
                             const top = (centers[mIdx] ?? 0) - CARD_H / 2;
                             return (
-                              <div key={mIdx} style={{ position: "absolute", top, left: 0, width: ROUND_W }}>
+                              <div key={mIdx} style={{
+                              position: "absolute", top, left: 0, width: ROUND_W,
+                              border: `0.5px solid ${matchup.winnerId ? "var(--accent)" : "var(--border)"}`,
+                              borderRadius: 8,
+                              overflow: "hidden",
+                            }}>
                                 {([matchup.homeTeamId, matchup.awayTeamId] as (string | null)[]).map((tid, slotIdx) => {
                                   const isTop = slotIdx === 0;
                                   const isWinner = !!matchup.winnerId && matchup.winnerId === tid;
@@ -407,9 +472,7 @@ export default function LeaguePage() {
                                         display: "flex", alignItems: "center", width: "100%",
                                         padding: "9px 14px",
                                         background: isWinner ? "var(--accent-dim)" : "var(--surface-2)",
-                                        border: `0.5px solid ${isWinner ? "var(--accent)" : "var(--border)"}`,
                                         borderBottom: isTop ? "0.5px solid var(--border)" : undefined,
-                                        borderRadius: isTop ? "8px 8px 0 0" : "0 0 8px 8px",
                                       }}
                                     >
                                       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -533,22 +596,88 @@ export default function LeaguePage() {
                 </p>
               ) : (
                 <div className="space-y-2">
-                  {players.map((p) => (
-                    <div
-                      key={p.id}
-                      className="flex items-center gap-3 text-sm py-2 px-3 rounded-lg"
-                      style={{ background: "var(--surface-2)" }}
-                    >
-                      {p.jerseyNumber !== undefined && (
-                        <span className="font-mono font-semibold text-xs w-8 text-center shrink-0" style={{ color: "var(--accent)" }}>
-                          #{p.jerseyNumber}
+                  {players.map((p) =>
+                    editingPlayer?.id === p.id ? (
+                      <div
+                        key={p.id}
+                        className="flex flex-col gap-2 p-3 rounded-lg"
+                        style={{ background: "var(--surface-2)", border: "1px solid var(--accent)" }}
+                      >
+                        <div className="flex gap-2">
+                          <input
+                            type="text"
+                            value={editForm.firstName}
+                            onChange={(e) => setEditForm({ ...editForm, firstName: e.target.value })}
+                            placeholder="First name"
+                            className="flex-1 px-3 py-1.5 rounded-lg text-sm outline-none"
+                            style={{ background: "var(--surface)", border: "1px solid var(--border)", color: "var(--foreground)" }}
+                          />
+                          <input
+                            type="text"
+                            value={editForm.lastName}
+                            onChange={(e) => setEditForm({ ...editForm, lastName: e.target.value })}
+                            placeholder="Last name"
+                            className="flex-1 px-3 py-1.5 rounded-lg text-sm outline-none"
+                            style={{ background: "var(--surface)", border: "1px solid var(--border)", color: "var(--foreground)" }}
+                          />
+                        </div>
+                        <div className="flex gap-2">
+                          <input
+                            type="number"
+                            value={editForm.jerseyNumber}
+                            onChange={(e) => setEditForm({ ...editForm, jerseyNumber: e.target.value })}
+                            placeholder="Jersey # (optional)"
+                            className="flex-1 px-3 py-1.5 rounded-lg text-sm outline-none"
+                            style={{ background: "var(--surface)", border: "1px solid var(--border)", color: "var(--foreground)" }}
+                          />
+                          <button
+                            onClick={() => setEditingPlayer(null)}
+                            className="cursor-pointer px-3 py-1.5 rounded-lg text-sm"
+                            style={{ background: "var(--surface)", color: "var(--muted)", border: "1px solid var(--border)" }}
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            onClick={handleSavePlayer}
+                            disabled={savingPlayer || !editForm.firstName.trim() || !editForm.lastName.trim()}
+                            className="cursor-pointer px-3 py-1.5 rounded-lg text-sm font-semibold disabled:opacity-50"
+                            style={{ background: "var(--accent)", color: "#000" }}
+                          >
+                            {savingPlayer ? "Saving…" : "Save"}
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div
+                        key={p.id}
+                        className="flex items-center gap-3 text-sm py-2 px-3 rounded-lg group"
+                        style={{ background: "var(--surface-2)" }}
+                      >
+                        {p.jerseyNumber !== undefined && (
+                          <span className="font-mono font-semibold text-xs w-8 text-center shrink-0" style={{ color: "var(--accent)" }}>
+                            #{p.jerseyNumber}
+                          </span>
+                        )}
+                        <span className={`flex-1 ${p.jerseyNumber === undefined ? "ml-11" : ""}`}>
+                          {p.firstName} {p.lastName}
                         </span>
-                      )}
-                      <span className={p.jerseyNumber === undefined ? "ml-11" : ""}>
-                        {p.firstName} {p.lastName}
-                      </span>
-                    </div>
-                  ))}
+                        <button
+                          onClick={() => {
+                            setEditingPlayer(p);
+                            setEditForm({
+                              firstName: p.firstName,
+                              lastName: p.lastName,
+                              jerseyNumber: p.jerseyNumber !== undefined ? String(p.jerseyNumber) : "",
+                            });
+                          }}
+                          className="cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity px-2 py-1 rounded text-xs"
+                          style={{ color: "var(--muted)", background: "var(--surface)" }}
+                        >
+                          Edit
+                        </button>
+                      </div>
+                    )
+                  )}
                 </div>
               )}
             </div>
@@ -625,6 +754,38 @@ export default function LeaguePage() {
                 style={{ background: "var(--tie)", color: "#000" }}
               >
                 {actioning ? "Ending…" : "End Season"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Reactivate League modal */}
+      {showReactivateModal && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50">
+          <div
+            className="w-full max-w-sm p-6 rounded-2xl"
+            style={{ background: "var(--surface)", border: "1px solid var(--border)" }}
+          >
+            <h2 className="text-lg font-bold mb-2">Reactivate this league?</h2>
+            <p className="text-sm mb-6" style={{ color: "var(--muted)" }}>
+              The league will move back to Active Leagues. You can create a new tournament bracket.
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowReactivateModal(false)}
+                className="cursor-pointer flex-1 py-2 rounded-lg text-sm"
+                style={{ background: "var(--surface-2)", color: "var(--muted)" }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleReactivate}
+                disabled={actioning}
+                className="cursor-pointer flex-1 py-2 rounded-lg text-sm font-semibold disabled:opacity-50"
+                style={{ background: "var(--accent)", color: "#000" }}
+              >
+                {actioning ? "Reactivating…" : "Reactivate"}
               </button>
             </div>
           </div>

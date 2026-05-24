@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import Link from "next/link";
 import { getLeague, getTeams, getGames, getBracket, saveBracket, deleteBracket, updateBracket } from "@/lib/firestore/leagues";
 import type { League, Team, Game, Bracket, BracketMatchup } from "@/types";
+import { computeSeedings, generateBracket, cascadeClear } from "@/lib/bracket";
 
 const TEAM_ROW_H = 40;
 const CARD_H = TEAM_ROW_H * 2;
@@ -13,51 +14,6 @@ const CONNECTOR_W = 32;
 const ROUND_W = 180;
 const LABEL_H = 30;
 const CHAMPION_W = 160;
-
-function computeSeedings(teams: Team[], games: Game[], scoringRules: League["scoringRules"]) {
-  const map: Record<string, number> = {};
-  for (const t of teams) map[t.id] = 0;
-  for (const g of games) {
-    if (g.homeScore > g.awayScore) {
-      map[g.homeTeamId] = (map[g.homeTeamId] ?? 0) + scoringRules.win;
-      map[g.awayTeamId] = (map[g.awayTeamId] ?? 0) + scoringRules.loss;
-    } else if (g.awayScore > g.homeScore) {
-      map[g.awayTeamId] = (map[g.awayTeamId] ?? 0) + scoringRules.win;
-      map[g.homeTeamId] = (map[g.homeTeamId] ?? 0) + scoringRules.loss;
-    } else {
-      map[g.homeTeamId] = (map[g.homeTeamId] ?? 0) + scoringRules.tie;
-      map[g.awayTeamId] = (map[g.awayTeamId] ?? 0) + scoringRules.tie;
-    }
-  }
-  return teams.sort((a, b) => (map[b.id] ?? 0) - (map[a.id] ?? 0));
-}
-
-function generateBracket(seededTeams: Team[]): BracketMatchup[][] {
-  const size = Math.pow(2, Math.ceil(Math.log2(Math.max(seededTeams.length, 2))));
-  const slots: (Team | null)[] = [...seededTeams];
-  while (slots.length < size) slots.push(null);
-
-  const firstRound: BracketMatchup[] = [];
-  for (let i = 0; i < size / 2; i++) {
-    firstRound.push({
-      homeTeamId: slots[i]?.id ?? null,
-      awayTeamId: slots[size - 1 - i]?.id ?? null,
-      winnerId: null,
-    });
-  }
-
-  const rounds: BracketMatchup[][] = [firstRound];
-  let currentSize = size / 2;
-  while (currentSize > 1) {
-    const round: BracketMatchup[] = [];
-    for (let i = 0; i < currentSize / 2; i++) {
-      round.push({ homeTeamId: null, awayTeamId: null, winnerId: null });
-    }
-    rounds.push(round);
-    currentSize = currentSize / 2;
-  }
-  return rounds;
-}
 
 // Computes the vertical center (in px) of each matchup in each round,
 // where round 0 is evenly spaced and later rounds are centered between their feeders.
@@ -149,13 +105,19 @@ export default function BracketPage() {
   async function handlePickWinner(roundIdx: number, matchIdx: number, winnerId: string) {
     if (!bracket) return;
     const updated: Bracket = JSON.parse(JSON.stringify(bracket));
-    updated.rounds[roundIdx][matchIdx].winnerId = winnerId;
+    const matchup = updated.rounds[roundIdx][matchIdx];
+    if (matchup.winnerId === winnerId) return;
+    matchup.winnerId = winnerId;
     if (roundIdx + 1 < updated.rounds.length) {
       const nextMatchIdx = Math.floor(matchIdx / 2);
+      const nextMatch = updated.rounds[roundIdx + 1][nextMatchIdx];
       if (matchIdx % 2 === 0) {
-        updated.rounds[roundIdx + 1][nextMatchIdx].homeTeamId = winnerId;
+        nextMatch.homeTeamId = winnerId;
       } else {
-        updated.rounds[roundIdx + 1][nextMatchIdx].awayTeamId = winnerId;
+        nextMatch.awayTeamId = winnerId;
+      }
+      if (nextMatch.winnerId) {
+        cascadeClear(updated.rounds, roundIdx + 1, nextMatchIdx);
       }
     }
     setBracket(updated);
@@ -234,7 +196,7 @@ export default function BracketPage() {
           <p className="text-xs mt-1 flex items-center gap-2" style={{ color: "var(--muted)" }}>
             <span>Generated {new Date(bracket.generatedAt).toLocaleDateString()}</span>
             <span style={{ width: 3, height: 3, borderRadius: "50%", background: "var(--border)", display: "inline-block", flexShrink: 0 }} />
-            <span>Click a team to advance them</span>
+            <span>{league.status === "ended" ? "Reactivate the league to edit this bracket" : "Click a team to advance them"}</span>
             <span style={{ width: 3, height: 3, borderRadius: "50%", background: "var(--border)", display: "inline-block", flexShrink: 0 }} />
             {champion ? (
               <span style={{ color: "var(--accent)" }}>{teamName(champion)} is champion!</span>
@@ -294,14 +256,22 @@ export default function BracketPage() {
                           return (
                             <div
                               key={mIdx}
-                              style={{ position: "absolute", top, left: 0, width: ROUND_W }}
+                              style={{
+                                position: "absolute",
+                                top,
+                                left: 0,
+                                width: ROUND_W,
+                                border: `0.5px solid ${matchup.winnerId ? "var(--accent)" : "var(--border)"}`,
+                                borderRadius: 8,
+                                overflow: "hidden",
+                              }}
                             >
                               {([matchup.homeTeamId, matchup.awayTeamId] as (string | null)[]).map((tid, slotIdx) => {
                                 const isTop = slotIdx === 0;
                                 const isWinner = !!matchup.winnerId && matchup.winnerId === tid;
                                 const isLoser = !!matchup.winnerId && matchup.winnerId !== tid;
                                 const isTbd = !tid;
-                                const clickable = !!tid && !matchup.winnerId;
+                                const clickable = !!tid && !isTbd && league?.status !== "ended";
 
                                 return (
                                   <button
@@ -314,9 +284,7 @@ export default function BracketPage() {
                                       width: "100%",
                                       padding: "9px 14px",
                                       background: isWinner ? "var(--accent-dim)" : "var(--surface-2)",
-                                      border: `0.5px solid ${isWinner ? "var(--accent)" : "var(--border)"}`,
                                       borderBottom: isTop ? `0.5px solid var(--border)` : undefined,
-                                      borderRadius: isTop ? "8px 8px 0 0" : "0 0 8px 8px",
                                       cursor: clickable ? "pointer" : "default",
                                       transition: "background 0.15s, border-color 0.15s",
                                       textAlign: "left",
@@ -469,7 +437,8 @@ export default function BracketPage() {
           {/* Reset button */}
           <button
             onClick={handleReset}
-            className="cursor-pointer mt-6 flex items-center gap-2"
+            disabled={league.status === "ended"}
+            className="cursor-pointer mt-6 flex items-center gap-2 disabled:opacity-30 disabled:cursor-not-allowed"
             style={{
               fontSize: 12,
               padding: "6px 16px",

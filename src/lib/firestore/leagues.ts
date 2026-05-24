@@ -9,6 +9,7 @@ import {
   query,
   where,
   serverTimestamp,
+  deleteField,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import type { League, Team, Game, Bracket, Player } from "@/types";
@@ -75,9 +76,65 @@ export async function addGame(
   return ref.id;
 }
 
+export async function scheduleGames(
+  leagueId: string,
+  matchups: { homeTeamId: string; awayTeamId: string; gameNumber: number }[]
+): Promise<void> {
+  await Promise.all(
+    matchups.map((m) =>
+      addDoc(collection(db, "leagues", leagueId, "games"), {
+        ...m,
+        status: "scheduled",
+        statLines: [],
+      })
+    )
+  );
+}
+
+export async function recordResult(
+  leagueId: string,
+  gameId: string,
+  homeScore: number,
+  awayScore: number,
+  homeSportsmanship?: number,
+  awaySportsmanship?: number
+): Promise<void> {
+  const data: Record<string, unknown> = { homeScore, awayScore, status: "played", playedAt: Date.now() };
+  if (homeSportsmanship !== undefined) data.homeSportsmanship = homeSportsmanship;
+  if (awaySportsmanship !== undefined) data.awaySportsmanship = awaySportsmanship;
+  await updateDoc(doc(db, "leagues", leagueId, "games", gameId), data);
+}
+
+export async function updateResult(
+  leagueId: string,
+  gameId: string,
+  homeScore: number,
+  awayScore: number,
+  homeSportsmanship?: number,
+  awaySportsmanship?: number
+): Promise<void> {
+  const data: Record<string, unknown> = { homeScore, awayScore };
+  if (homeSportsmanship !== undefined) data.homeSportsmanship = homeSportsmanship;
+  if (awaySportsmanship !== undefined) data.awaySportsmanship = awaySportsmanship;
+  await updateDoc(doc(db, "leagues", leagueId, "games", gameId), data);
+}
+
 export async function getPlayers(leagueId: string, teamId: string): Promise<Player[]> {
   const snap = await getDocs(collection(db, "leagues", leagueId, "teams", teamId, "players"));
   return snap.docs.map((d) => ({ id: d.id, ...d.data() } as Player));
+}
+
+export async function updatePlayer(
+  leagueId: string,
+  teamId: string,
+  playerId: string,
+  data: Partial<Omit<Player, "id" | "teamId" | "stats">>,
+  clearJerseyNumber = false
+): Promise<void> {
+  await updateDoc(doc(db, "leagues", leagueId, "teams", teamId, "players", playerId), {
+    ...data,
+    ...(clearJerseyNumber ? { jerseyNumber: deleteField() } : {}),
+  });
 }
 
 export async function addPlayer(
@@ -94,6 +151,10 @@ export async function addPlayer(
 
 export async function endLeague(leagueId: string): Promise<void> {
   await updateLeague(leagueId, { status: "ended" });
+}
+
+export async function reactivateLeague(leagueId: string): Promise<void> {
+  await updateLeague(leagueId, { status: "active" });
 }
 
 export async function deleteLeague(leagueId: string): Promise<void> {
