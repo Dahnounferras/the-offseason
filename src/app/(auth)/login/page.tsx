@@ -25,8 +25,12 @@ export default function LoginPage() {
     try {
       await signInWithPopup(auth, new GoogleAuthProvider());
       router.push("/dashboard");
-    } catch {
-      setError("Sign-in failed. Please try again.");
+    } catch (err: unknown) {
+      const code = (err as { code?: string })?.code;
+      if (code !== "auth/popup-closed-by-user" && code !== "auth/cancelled-popup-request") {
+        setError("Sign-in failed. Please try again.");
+      }
+    } finally {
       setLoading(false);
     }
   }
