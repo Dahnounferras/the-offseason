@@ -11,12 +11,10 @@ import {
   saveGameStatLines,
 } from "@/lib/firestore/leagues";
 import type { League, Team, Game, Player, StatLine } from "@/types";
+import { getSportConfig } from "@/lib/sportConfig";
 
 type PlayerInfo = { player: Player; teamName: string };
-
-const STAT_KEYS = ["pts", "ast", "reb", "blk", "stl"] as const;
-type StatKey = (typeof STAT_KEYS)[number];
-type DraftRow = Record<StatKey, string>;
+type DraftRow = Record<string, string>;
 
 export default function StatsPage() {
   const { id } = useParams<{ id: string }>();
@@ -48,6 +46,12 @@ export default function StatsPage() {
     });
   }, [id]);
 
+  const sportConfig = useMemo(
+    () => getSportConfig(league?.sport ?? "Basketball"),
+    [league]
+  );
+  const statKeys = sportConfig.statKeys;
+
   const playedGames = useMemo(
     () => games.filter((g) => g.status === "played"),
     [games]
@@ -61,22 +65,21 @@ export default function StatsPage() {
   const teamName = (tid: string) => teams.find((t) => t.id === tid)?.name ?? tid;
 
   const seasonTotals = useMemo(() => {
-    const totals: Record<string, { pts: number; ast: number; reb: number; blk: number; stl: number; gp: number }> = {};
+    type TotalsEntry = { [key: string]: number; gp: number };
+    const totals: Record<string, TotalsEntry> = {};
     for (const game of playedGames) {
       for (const sl of game.statLines ?? []) {
         if (!totals[sl.playerId]) {
-          totals[sl.playerId] = { pts: 0, ast: 0, reb: 0, blk: 0, stl: 0, gp: 0 };
+          totals[sl.playerId] = { gp: 0, ...Object.fromEntries(statKeys.map((k) => [k, 0])) };
         }
-        totals[sl.playerId].pts += sl.stats.pts ?? 0;
-        totals[sl.playerId].ast += sl.stats.ast ?? 0;
-        totals[sl.playerId].reb += sl.stats.reb ?? 0;
-        totals[sl.playerId].blk += sl.stats.blk ?? 0;
-        totals[sl.playerId].stl += sl.stats.stl ?? 0;
+        for (const k of statKeys) {
+          totals[sl.playerId][k] = (totals[sl.playerId][k] ?? 0) + (sl.stats[k] ?? 0);
+        }
         totals[sl.playerId].gp += 1;
       }
     }
     return totals;
-  }, [playedGames]);
+  }, [playedGames, statKeys]);
 
   const gamePlayers = useMemo(() => {
     if (!selectedGame) return [] as { playerId: string; info: PlayerInfo }[];
@@ -99,13 +102,9 @@ export default function StatsPage() {
     const draft: Record<string, DraftRow> = {};
     for (const { playerId } of gamePlayers) {
       const existing = (game.statLines ?? []).find((sl) => sl.playerId === playerId);
-      draft[playerId] = {
-        pts: existing ? String(existing.stats.pts ?? 0) : "",
-        ast: existing ? String(existing.stats.ast ?? 0) : "",
-        reb: existing ? String(existing.stats.reb ?? 0) : "",
-        blk: existing ? String(existing.stats.blk ?? 0) : "",
-        stl: existing ? String(existing.stats.stl ?? 0) : "",
-      };
+      draft[playerId] = Object.fromEntries(
+        statKeys.map((k) => [k, existing ? String(existing.stats[k] ?? 0) : ""])
+      );
     }
     setDraftStats(draft);
     setEditingStats(true);
@@ -117,13 +116,7 @@ export default function StatsPage() {
     try {
       const statLines: StatLine[] = Object.entries(draftStats).map(([playerId, row]) => ({
         playerId,
-        stats: {
-          pts: Number(row.pts) || 0,
-          ast: Number(row.ast) || 0,
-          reb: Number(row.reb) || 0,
-          blk: Number(row.blk) || 0,
-          stl: Number(row.stl) || 0,
-        },
+        stats: Object.fromEntries(statKeys.map((k) => [k, Number(row[k]) || 0])),
       }));
       await saveGameStatLines(id, selectedGame.id, statLines);
       setGames((prev) =>
@@ -139,9 +132,9 @@ export default function StatsPage() {
     .map(([pid, info]) => ({
       pid,
       info,
-      totals: seasonTotals[pid] ?? { pts: 0, ast: 0, reb: 0, blk: 0, stl: 0, gp: 0 },
+      totals: seasonTotals[pid] ?? { gp: 0, ...Object.fromEntries(statKeys.map((k) => [k, 0])) },
     }))
-    .sort((a, b) => b.totals.pts - a.totals.pts);
+    .sort((a, b) => (b.totals[sportConfig.primaryStat] ?? 0) - (a.totals[sportConfig.primaryStat] ?? 0));
 
   if (!league) {
     return (
@@ -213,47 +206,21 @@ export default function StatsPage() {
               <tr style={{ background: "var(--surface-2)" }}>
                 <th className="text-left px-4 py-3">Player</th>
                 <th className="text-left px-4 py-3">Team</th>
-                <th
-                  className="px-4 py-3 text-center"
-                  style={{ color: "var(--muted)" }}
-                >
-                  GP
-                </th>
-                <th
-                  className="px-4 py-3 text-center font-bold"
-                  style={{ color: "var(--accent)" }}
-                >
-                  PTS
-                </th>
-                <th
-                  className="px-4 py-3 text-center"
-                  style={{ color: "var(--muted)" }}
-                >
-                  AST
-                </th>
-                <th
-                  className="px-4 py-3 text-center"
-                  style={{ color: "var(--muted)" }}
-                >
-                  REB
-                </th>
-                <th
-                  className="px-4 py-3 text-center"
-                  style={{ color: "var(--muted)" }}
-                >
-                  BLK
-                </th>
-                <th
-                  className="px-4 py-3 text-center"
-                  style={{ color: "var(--muted)" }}
-                >
-                  STL
-                </th>
-                <th
-                  className="px-4 py-3 text-center"
-                  style={{ color: "var(--muted)" }}
-                >
-                  PPG
+                <th className="px-4 py-3 text-center" style={{ color: "var(--muted)" }}>GP</th>
+                {statKeys.map((k) => (
+                  <th
+                    key={k}
+                    className="px-4 py-3 text-center"
+                    style={{
+                      color: k === sportConfig.primaryStat ? "var(--accent)" : "var(--muted)",
+                      fontWeight: k === sportConfig.primaryStat ? 700 : 400,
+                    }}
+                  >
+                    {sportConfig.statLabels[k]?.abbrev ?? k.toUpperCase()}
+                  </th>
+                ))}
+                <th className="px-4 py-3 text-center" style={{ color: "var(--muted)" }}>
+                  {sportConfig.computedStatLabel}
                 </th>
               </tr>
             </thead>
@@ -261,7 +228,7 @@ export default function StatsPage() {
               {seasonRows.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={9}
+                    colSpan={statKeys.length + 4}
                     className="text-center py-10"
                     style={{ color: "var(--muted)" }}
                   >
@@ -288,54 +255,27 @@ export default function StatsPage() {
                       )}
                       {info.player.firstName} {info.player.lastName}
                     </td>
-                    <td
-                      className="px-4 py-3"
-                      style={{ color: "var(--muted)" }}
-                    >
+                    <td className="px-4 py-3" style={{ color: "var(--muted)" }}>
                       {info.teamName}
                     </td>
-                    <td
-                      className="px-4 py-3 text-center"
-                      style={{ color: "var(--muted)" }}
-                    >
+                    <td className="px-4 py-3 text-center" style={{ color: "var(--muted)" }}>
                       {totals.gp}
                     </td>
-                    <td
-                      className="px-4 py-3 text-center font-bold"
-                      style={{ color: "var(--accent)" }}
-                    >
-                      {totals.pts}
-                    </td>
-                    <td
-                      className="px-4 py-3 text-center"
-                      style={{ color: "var(--muted)" }}
-                    >
-                      {totals.ast}
-                    </td>
-                    <td
-                      className="px-4 py-3 text-center"
-                      style={{ color: "var(--muted)" }}
-                    >
-                      {totals.reb}
-                    </td>
-                    <td
-                      className="px-4 py-3 text-center"
-                      style={{ color: "var(--muted)" }}
-                    >
-                      {totals.blk}
-                    </td>
-                    <td
-                      className="px-4 py-3 text-center"
-                      style={{ color: "var(--muted)" }}
-                    >
-                      {totals.stl}
-                    </td>
-                    <td
-                      className="px-4 py-3 text-center"
-                      style={{ color: "var(--muted)" }}
-                    >
+                    {statKeys.map((k) => (
+                      <td
+                        key={k}
+                        className="px-4 py-3 text-center"
+                        style={{
+                          color: k === sportConfig.primaryStat ? "var(--accent)" : "var(--muted)",
+                          fontWeight: k === sportConfig.primaryStat ? 600 : 400,
+                        }}
+                      >
+                        {totals[k] ?? 0}
+                      </td>
+                    ))}
+                    <td className="px-4 py-3 text-center" style={{ color: "var(--muted)" }}>
                       {totals.gp > 0
-                        ? (totals.pts / totals.gp).toFixed(1)
+                        ? ((totals[sportConfig.primaryStat] ?? 0) / totals.gp).toFixed(1)
                         : "—"}
                     </td>
                   </tr>
@@ -476,43 +416,25 @@ export default function StatsPage() {
                         >
                           Team
                         </th>
-                        <th
-                          className="px-4 py-2 text-center font-bold"
-                          style={{ color: "var(--accent)" }}
-                        >
-                          PTS
-                        </th>
-                        <th
-                          className="px-4 py-2 text-center font-medium"
-                          style={{ color: "var(--muted)" }}
-                        >
-                          AST
-                        </th>
-                        <th
-                          className="px-4 py-2 text-center font-medium"
-                          style={{ color: "var(--muted)" }}
-                        >
-                          REB
-                        </th>
-                        <th
-                          className="px-4 py-2 text-center font-medium"
-                          style={{ color: "var(--muted)" }}
-                        >
-                          BLK
-                        </th>
-                        <th
-                          className="px-4 py-2 text-center font-medium"
-                          style={{ color: "var(--muted)" }}
-                        >
-                          STL
-                        </th>
+                        {statKeys.map((k) => (
+                          <th
+                            key={k}
+                            className="px-4 py-2 text-center"
+                            style={{
+                              color: k === sportConfig.primaryStat ? "var(--accent)" : "var(--muted)",
+                              fontWeight: k === sportConfig.primaryStat ? 700 : 400,
+                            }}
+                          >
+                            {sportConfig.statLabels[k]?.abbrev ?? k.toUpperCase()}
+                          </th>
+                        ))}
                       </tr>
                     </thead>
                     <tbody>
                       {gamePlayers.length === 0 ? (
                         <tr>
                           <td
-                            colSpan={7}
+                            colSpan={statKeys.length + 2}
                             className="text-center py-8"
                             style={{ color: "var(--muted)" }}
                           >
@@ -552,7 +474,7 @@ export default function StatsPage() {
                                 {info.teamName}
                               </td>
                               {editingStats
-                                ? STAT_KEYS.map((k) => (
+                                ? statKeys.map((k) => (
                                     <td
                                       key={k}
                                       className="px-2 py-2 text-center"
@@ -580,16 +502,15 @@ export default function StatsPage() {
                                       />
                                     </td>
                                   ))
-                                : STAT_KEYS.map((k) => (
+                                : statKeys.map((k) => (
                                     <td
                                       key={k}
                                       className="px-4 py-2.5 text-center"
                                       style={{
-                                        color:
-                                          k === "pts"
-                                            ? "var(--accent)"
-                                            : "var(--muted)",
-                                        fontWeight: k === "pts" ? 600 : 400,
+                                        color: k === sportConfig.primaryStat
+                                          ? "var(--accent)"
+                                          : "var(--muted)",
+                                        fontWeight: k === sportConfig.primaryStat ? 600 : 400,
                                       }}
                                     >
                                       {existingSl

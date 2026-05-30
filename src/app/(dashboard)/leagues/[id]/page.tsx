@@ -320,6 +320,18 @@ export default function LeaguePage() {
         </div>
       </div>
 
+      {games.length === 0 && teams.length < 2 && league.status !== "ended" && (
+        <div
+          className="mb-6 px-4 py-3 rounded-xl text-sm flex items-center gap-3"
+          style={{ background: "var(--surface-2)", border: "1px solid var(--border)", color: "var(--muted)" }}
+        >
+          <span style={{ color: "var(--accent)", fontSize: "1.1rem" }}>ⓘ</span>
+          <span>
+            Add at least <strong style={{ color: "var(--foreground)" }}>2 teams</strong> before starting the league — the schedule can&apos;t be generated without them.
+          </span>
+        </div>
+      )}
+
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2">
           <h2 className="font-semibold mb-3">Standings</h2>

@@ -60,6 +60,13 @@ export async function addTeam(
   return ref.id;
 }
 
+export async function deleteTeam(
+  leagueId: string,
+  teamId: string
+): Promise<void> {
+  await deleteDoc(doc(db, "leagues", leagueId, "teams", teamId));
+}
+
 export async function getGames(leagueId: string): Promise<Game[]> {
   const snap = await getDocs(collection(db, "leagues", leagueId, "games"));
   return snap.docs.map((d) => ({ id: d.id, ...d.data() } as Game));
@@ -147,6 +154,14 @@ export async function addPlayer(
     data
   );
   return ref.id;
+}
+
+export async function deletePlayer(
+  leagueId: string,
+  teamId: string,
+  playerId: string
+): Promise<void> {
+  await deleteDoc(doc(db, "leagues", leagueId, "teams", teamId, "players", playerId));
 }
 
 export async function endLeague(leagueId: string): Promise<void> {
