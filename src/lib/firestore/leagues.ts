@@ -12,7 +12,7 @@ import {
   deleteField,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import type { League, Team, Game, Bracket, Player } from "@/types";
+import type { League, Team, Game, Bracket, Player, StatLine } from "@/types";
 
 export async function getLeague(leagueId: string): Promise<League | null> {
   const snap = await getDoc(doc(db, "leagues", leagueId));
@@ -188,6 +188,14 @@ export async function saveBracket(
     }
   );
   return ref.id;
+}
+
+export async function saveGameStatLines(
+  leagueId: string,
+  gameId: string,
+  statLines: StatLine[]
+): Promise<void> {
+  await updateDoc(doc(db, "leagues", leagueId, "games", gameId), { statLines });
 }
 
 export async function deleteBracket(leagueId: string, bracketId: string): Promise<void> {

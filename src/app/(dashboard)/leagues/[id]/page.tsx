@@ -223,6 +223,20 @@ export default function LeaguePage() {
               >
                 Games
               </Link>
+              <Link
+                href={`/leagues/${id}/stats`}
+                className="px-4 py-2 rounded-lg text-sm font-semibold"
+                style={{ background: "var(--surface-2)", color: "var(--foreground)", border: "1px solid var(--border)" }}
+              >
+                Stats
+              </Link>
+              <Link
+                href={`/leagues/${id}/teams`}
+                className="px-4 py-2 rounded-lg text-sm font-semibold"
+                style={{ background: "var(--surface-2)", color: "var(--foreground)", border: "1px solid var(--border)" }}
+              >
+                Teams
+              </Link>
               <div style={{ position: "relative", display: "inline-block" }} className="group">
                 {league.status === "ended" ? (
                   <>
@@ -339,7 +353,15 @@ export default function LeaguePage() {
                     style={{ background: i % 2 === 0 ? "var(--surface)" : "var(--surface-2)" }}
                   >
                     <td className="px-4 py-3" style={{ color: "var(--muted)" }}>{i + 1}</td>
-                    <td className="px-4 py-3 font-medium">{row.team.name}</td>
+                    <td className="px-4 py-3 font-medium">
+                      <Link
+                        href={`/leagues/${id}/teams/${row.team.id}`}
+                        className="hover:underline"
+                        style={{ color: "var(--foreground)" }}
+                      >
+                        {row.team.name}
+                      </Link>
+                    </td>
                     <td className="px-4 py-3 text-center" style={{ color: "var(--muted)" }}>{row.gp}</td>
                     <td className="px-4 py-3 text-center" style={{ color: "var(--win)" }}>{row.w}</td>
                     <td className="px-4 py-3 text-center" style={{ color: "var(--loss)" }}>{row.l}</td>
