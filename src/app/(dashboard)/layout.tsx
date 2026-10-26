@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import Image from "next/image";
 import { signOut } from "firebase/auth";
 import { auth } from "@/lib/firebase";
 import { useAuth } from "@/hooks/useAuth";
@@ -40,7 +41,7 @@ export default function DashboardLayout({
           className="font-bold text-lg"
           style={{ display: "flex", alignItems: "center", gap: 8, textDecoration: "none", color: "var(--foreground)" }}
         >
-          <img src="/logo.png" alt="" style={{ width: 28, height: 28, borderRadius: 7 }} />
+          <Image src="/logo.png" alt="" width={28} height={28} style={{ borderRadius: 7 }} />
           The Offseason
         </Link>
         <div className="flex items-center gap-4">

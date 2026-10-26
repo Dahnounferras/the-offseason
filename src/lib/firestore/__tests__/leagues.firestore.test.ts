@@ -99,7 +99,7 @@ describe("createLeague", () => {
   it("calls addDoc with createdAt as a number", async () => {
     vi.mocked(addDoc).mockResolvedValueOnce({ id: "new-id" } as never);
     await createLeague({ name: "Fall League", sport: "Football", ownerId: "u1", isPublic: false, season: { totalGames: 10, currentGame: 0 }, scoringRules: { win: 2, tie: 1, loss: 0 } });
-    const payload = vi.mocked(addDoc).mock.calls[0][1] as Record<string, unknown>;
+    const payload = vi.mocked(addDoc).mock.calls[0][1] as unknown as Record<string, unknown>;
     expect(typeof payload.createdAt).toBe("number");
   });
 
@@ -114,7 +114,7 @@ describe("addTeam", () => {
   it("creates team with default win/loss/ties of 0", async () => {
     vi.mocked(addDoc).mockResolvedValueOnce({ id: "team-1" } as never);
     await addTeam("league-1", "Hawks");
-    const payload = vi.mocked(addDoc).mock.calls[0][1] as Record<string, unknown>;
+    const payload = vi.mocked(addDoc).mock.calls[0][1] as unknown as Record<string, unknown>;
     expect(payload).toMatchObject({ name: "Hawks", wins: 0, losses: 0, ties: 0 });
   });
 
@@ -139,7 +139,7 @@ describe("scheduleGames", () => {
   it("includes status: scheduled and statLines: [] in each game", async () => {
     vi.mocked(addDoc).mockResolvedValue({ id: "g" } as never);
     await scheduleGames("league-1", [{ homeTeamId: "A", awayTeamId: "B", gameNumber: 1 }]);
-    const payload = vi.mocked(addDoc).mock.calls[0][1] as Record<string, unknown>;
+    const payload = vi.mocked(addDoc).mock.calls[0][1] as unknown as Record<string, unknown>;
     expect(payload.status).toBe("scheduled");
     expect(payload.statLines).toEqual([]);
   });
@@ -149,7 +149,7 @@ describe("recordResult", () => {
   it("includes status: played and playedAt as a number", async () => {
     vi.mocked(updateDoc).mockResolvedValueOnce(undefined);
     await recordResult("l1", "g1", 3, 1);
-    const payload = vi.mocked(updateDoc).mock.calls[0][1] as Record<string, unknown>;
+    const payload = vi.mocked(updateDoc).mock.calls[0][1] as unknown as Record<string, unknown>;
     expect(payload.status).toBe("played");
     expect(typeof payload.playedAt).toBe("number");
     expect(payload.homeScore).toBe(3);
@@ -159,7 +159,7 @@ describe("recordResult", () => {
   it("includes sportsmanship when provided", async () => {
     vi.mocked(updateDoc).mockResolvedValueOnce(undefined);
     await recordResult("l1", "g1", 3, 1, 4, 5);
-    const payload = vi.mocked(updateDoc).mock.calls[0][1] as Record<string, unknown>;
+    const payload = vi.mocked(updateDoc).mock.calls[0][1] as unknown as Record<string, unknown>;
     expect(payload.homeSportsmanship).toBe(4);
     expect(payload.awaySportsmanship).toBe(5);
   });
@@ -167,7 +167,7 @@ describe("recordResult", () => {
   it("omits sportsmanship fields when not provided", async () => {
     vi.mocked(updateDoc).mockResolvedValueOnce(undefined);
     await recordResult("l1", "g1", 3, 1);
-    const payload = vi.mocked(updateDoc).mock.calls[0][1] as Record<string, unknown>;
+    const payload = vi.mocked(updateDoc).mock.calls[0][1] as unknown as Record<string, unknown>;
     expect("homeSportsmanship" in payload).toBe(false);
     expect("awaySportsmanship" in payload).toBe(false);
   });
@@ -177,7 +177,7 @@ describe("updateResult", () => {
   it("only includes homeScore and awayScore (no status, no playedAt)", async () => {
     vi.mocked(updateDoc).mockResolvedValueOnce(undefined);
     await updateResult("l1", "g1", 5, 2);
-    const payload = vi.mocked(updateDoc).mock.calls[0][1] as Record<string, unknown>;
+    const payload = vi.mocked(updateDoc).mock.calls[0][1] as unknown as Record<string, unknown>;
     expect(payload.homeScore).toBe(5);
     expect(payload.awayScore).toBe(2);
     expect("status" in payload).toBe(false);
@@ -187,7 +187,7 @@ describe("updateResult", () => {
   it("includes sportsmanship fields when provided", async () => {
     vi.mocked(updateDoc).mockResolvedValueOnce(undefined);
     await updateResult("l1", "g1", 2, 3, 3, 4);
-    const payload = vi.mocked(updateDoc).mock.calls[0][1] as Record<string, unknown>;
+    const payload = vi.mocked(updateDoc).mock.calls[0][1] as unknown as Record<string, unknown>;
     expect(payload.homeSportsmanship).toBe(3);
     expect(payload.awaySportsmanship).toBe(4);
   });
@@ -197,21 +197,21 @@ describe("endLeague / reactivateLeague / deleteLeague", () => {
   it("endLeague calls updateDoc with status: ended", async () => {
     vi.mocked(updateDoc).mockResolvedValueOnce(undefined);
     await endLeague("l1");
-    const payload = vi.mocked(updateDoc).mock.calls[0][1] as Record<string, unknown>;
+    const payload = vi.mocked(updateDoc).mock.calls[0][1] as unknown as Record<string, unknown>;
     expect(payload.status).toBe("ended");
   });
 
   it("reactivateLeague calls updateDoc with status: active", async () => {
     vi.mocked(updateDoc).mockResolvedValueOnce(undefined);
     await reactivateLeague("l1");
-    const payload = vi.mocked(updateDoc).mock.calls[0][1] as Record<string, unknown>;
+    const payload = vi.mocked(updateDoc).mock.calls[0][1] as unknown as Record<string, unknown>;
     expect(payload.status).toBe("active");
   });
 
   it("deleteLeague calls updateDoc with status: deleted", async () => {
     vi.mocked(updateDoc).mockResolvedValueOnce(undefined);
     await deleteLeague("l1");
-    const payload = vi.mocked(updateDoc).mock.calls[0][1] as Record<string, unknown>;
+    const payload = vi.mocked(updateDoc).mock.calls[0][1] as unknown as Record<string, unknown>;
     expect(payload.status).toBe("deleted");
   });
 });
@@ -221,14 +221,14 @@ describe("updatePlayer", () => {
     vi.mocked(updateDoc).mockResolvedValueOnce(undefined);
     vi.mocked(deleteField).mockReturnValue({ _type: "deleteField" } as never);
     await updatePlayer("l1", "t1", "p1", { firstName: "John" }, true);
-    const payload = vi.mocked(updateDoc).mock.calls[0][1] as Record<string, unknown>;
+    const payload = vi.mocked(updateDoc).mock.calls[0][1] as unknown as Record<string, unknown>;
     expect(payload.jerseyNumber).toEqual({ _type: "deleteField" });
   });
 
   it("does not include jerseyNumber key when clearJerseyNumber is false", async () => {
     vi.mocked(updateDoc).mockResolvedValueOnce(undefined);
     await updatePlayer("l1", "t1", "p1", { firstName: "Jane" }, false);
-    const payload = vi.mocked(updateDoc).mock.calls[0][1] as Record<string, unknown>;
+    const payload = vi.mocked(updateDoc).mock.calls[0][1] as unknown as Record<string, unknown>;
     expect("jerseyNumber" in payload).toBe(false);
   });
 });
@@ -265,7 +265,7 @@ describe("saveBracket", () => {
     vi.mocked(addDoc).mockResolvedValueOnce({ id: "bracket-new" } as never);
     const rounds = [[{ homeTeamId: "A", awayTeamId: "B", winnerId: null }]];
     await saveBracket("l1", { rounds, generatedAt: 123, status: "active" });
-    const payload = vi.mocked(addDoc).mock.calls[0][1] as Record<string, unknown>;
+    const payload = vi.mocked(addDoc).mock.calls[0][1] as unknown as Record<string, unknown>;
     expect(payload.rounds).toEqual([{ matchups: rounds[0] }]);
   });
 
@@ -281,7 +281,7 @@ describe("updateBracket", () => {
     vi.mocked(updateDoc).mockResolvedValueOnce(undefined);
     const rounds = [[{ homeTeamId: "A", awayTeamId: "B", winnerId: "A" }]];
     await updateBracket("l1", "b1", rounds);
-    const payload = vi.mocked(updateDoc).mock.calls[0][1] as Record<string, unknown>;
+    const payload = vi.mocked(updateDoc).mock.calls[0][1] as unknown as Record<string, unknown>;
     expect(payload.rounds).toEqual([{ matchups: rounds[0] }]);
   });
 });

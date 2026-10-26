@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 import LeaguePreview from "@/components/LeaguePreview";
 import HomeNav from "@/components/HomeNav";
 
@@ -89,7 +90,7 @@ export default function LandingPage() {
               flexShrink: 0,
             }}
           >
-            <img src="/logo.png" alt="" style={{ width: 30, height: 30, borderRadius: 8 }} />
+            <Image src="/logo.png" alt="" width={30} height={30} style={{ borderRadius: 8 }} />
             The Offseason
           </Link>
 
