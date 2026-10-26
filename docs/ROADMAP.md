@@ -39,6 +39,16 @@ Do step 4 before step 5. Most UI exists in 2–4 copies right now, so every UX c
 - Deleted the `create-next-app` SVGs. Rewrote `README.md` (setup, env vars, rules deploy, scripts). Added `.env.example`.
 - CI: `.github/workflows/ci.yml` runs lint (`--max-warnings=0`), typecheck and tests on pushes to `main` and on PRs.
 
+### Follow-ups from step 3
+
+- **Browser smoke test (not done yet).** Lint, typecheck, tests, `next build` and CI all pass, and `/`, `/login` and `/dashboard` returned 200 on the dev server. Nobody has clicked through the signed-in app yet. With `npm run dev`, signed in:
+  - Create a league, add two teams and a player, start the season, and record a result.
+  - Check that the overview "games played" count, the games list, the stats page, the team page and the standings all agree.
+  - If you have a league with games from before scheduling existed (no `status` field), check that those games now show up on the stats and team pages too. That is the one intended behavior change.
+  - Reset League: games and the bracket are cleared, and teams and players stay.
+  - The logo renders on the landing, login and dashboard pages.
+- The Firestore rules deploy from step 2 is still pending (see "Follow-ups from step 2").
+
 ## Step 3: original checklist
 
 - Dead data fields:
