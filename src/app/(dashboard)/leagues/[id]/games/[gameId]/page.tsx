@@ -12,11 +12,11 @@ import {
   updateResult,
   saveGameStatLines,
 } from "@/lib/firestore/leagues";
-import type { League, Team, Game, Player, StatLine } from "@/types";
+import type { League, Team, Game, Player } from "@/types";
 import { getSportConfig } from "@/lib/sportConfig";
 import Spinner from "@/components/Spinner";
-
-type DraftRow = Record<string, string>;
+import { buildStatDraft, draftToStatLines, type StatDraft } from "@/lib/stats";
+import StatGrid from "@/components/league/StatGrid";
 
 export default function GameDetailPage() {
   const { id, gameId } = useParams<{ id: string; gameId: string }>();
@@ -33,7 +33,7 @@ export default function GameDetailPage() {
 
   // Stats state
   const [editingStats, setEditingStats] = useState(false);
-  const [draftStats, setDraftStats] = useState<Record<string, DraftRow>>({});
+  const [draftStats, setDraftStats] = useState<StatDraft>({});
   const [savingStats, setSavingStats] = useState(false);
 
   useEffect(() => {
@@ -99,14 +99,7 @@ export default function GameDetailPage() {
 
   function startEditStats() {
     if (!game) return;
-    const draft: Record<string, DraftRow> = {};
-    for (const p of allPlayers) {
-      const existing = (game.statLines ?? []).find((sl) => sl.playerId === p.id);
-      draft[p.id] = Object.fromEntries(
-        statKeys.map((k) => [k, existing ? String(existing.stats[k] ?? 0) : ""])
-      );
-    }
-    setDraftStats(draft);
+    setDraftStats(buildStatDraft(allPlayers.map((p) => p.id), game, statKeys));
     setEditingStats(true);
   }
 
@@ -114,22 +107,13 @@ export default function GameDetailPage() {
     if (!game) return;
     setSavingStats(true);
     try {
-      const statLines: StatLine[] = Object.entries(draftStats).map(([playerId, row]) => ({
-        playerId,
-        stats: Object.fromEntries(statKeys.map((k) => [k, Number(row[k]) || 0])),
-      }));
+      const statLines = draftToStatLines(draftStats, statKeys);
       await saveGameStatLines(id, game.id, statLines);
       setGame((g) => g ? { ...g, statLines } : g);
       setEditingStats(false);
     } finally {
       setSavingStats(false);
     }
-  }
-
-  function getStatValue(playerId: string, key: string): string | number {
-    const sl = (game?.statLines ?? []).find((s) => s.playerId === playerId);
-    if (!sl) return "—";
-    return sl.stats[key] ?? 0;
   }
 
   const isPlayed = game?.status === "played";
@@ -332,71 +316,17 @@ export default function GameDetailPage() {
                 No players on this roster.
               </div>
             ) : (
-              <table className="w-full text-sm">
-                <thead>
-                  <tr style={{ background: "var(--surface-2)" }}>
-                    <th className="text-left px-3 py-2 text-xs" style={{ color: "var(--muted)" }}>#</th>
-                    <th className="text-left px-3 py-2 text-xs">Player</th>
-                    {statKeys.map((k) => (
-                      <th
-                        key={k}
-                        className="px-3 py-2 text-center text-xs"
-                        style={{
-                          color: k === sportConfig.primaryStat ? "var(--accent)" : "var(--muted)",
-                          fontWeight: k === sportConfig.primaryStat ? 700 : 400,
-                        }}
-                      >
-                        {sportConfig.statLabels[k]?.abbrev ?? k.toUpperCase()}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {players.map((player, i) => (
-                    <tr
-                      key={player.id}
-                      style={{ background: i % 2 === 0 ? "var(--surface)" : "var(--surface-2)" }}
-                    >
-                      <td className="px-3 py-2.5 font-mono text-xs" style={{ color: "var(--accent)" }}>
-                        {player.jerseyNumber !== undefined ? `#${player.jerseyNumber}` : ""}
-                      </td>
-                      <td className="px-3 py-2.5 font-medium text-xs">
-                        {player.firstName} {player.lastName}
-                      </td>
-                      {editingStats
-                        ? statKeys.map((k) => (
-                            <td key={k} className="px-1 py-2 text-center">
-                              <input
-                                type="number" min={0} placeholder="0"
-                                value={draftStats[player.id]?.[k] ?? ""}
-                                onChange={(e) =>
-                                  setDraftStats((prev) => ({
-                                    ...prev,
-                                    [player.id]: { ...prev[player.id], [k]: e.target.value },
-                                  }))
-                                }
-                                className="w-12 px-1 py-1 rounded text-xs text-center outline-none"
-                                style={{ background: "var(--surface-2)", border: "1px solid var(--border)", color: "var(--foreground)" }}
-                              />
-                            </td>
-                          ))
-                        : statKeys.map((k) => (
-                            <td
-                              key={k}
-                              className="px-3 py-2.5 text-center text-xs"
-                              style={{
-                                color: k === sportConfig.primaryStat ? "var(--accent)" : "var(--muted)",
-                                fontWeight: k === sportConfig.primaryStat ? 600 : 400,
-                              }}
-                            >
-                              {getStatValue(player.id, k)}
-                            </td>
-                          ))
-                      }
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              <StatGrid
+                rows={players.map((player) => ({ player }))}
+                game={game}
+                sportConfig={sportConfig}
+                editing={editingStats}
+                draft={draftStats}
+                onDraftChange={(playerId, k, value) =>
+                  setDraftStats((prev) => ({ ...prev, [playerId]: { ...prev[playerId], [k]: value } }))
+                }
+                dense
+              />
             )}
           </div>
         ))}

@@ -8,6 +8,7 @@ import type { League, Team, Game } from "@/types";
 import { computeStandings } from "@/lib/standings";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
+import StandingsTable from "@/components/league/StandingsTable";
 import ConfirmModal from "@/components/ui/ConfirmModal";
 
 export default function TeamsPage() {
@@ -93,74 +94,37 @@ export default function TeamsPage() {
             No teams yet. Add one below.
           </div>
         ) : (
-          <table className="w-full text-sm">
-            <thead>
-              <tr style={{ background: "var(--surface-2)" }}>
-                <th className="text-left px-4 py-3">#</th>
-                <th className="text-left px-4 py-3">Team</th>
-                <th className="px-4 py-3 text-center">GP</th>
-                <th className="px-4 py-3 text-center" style={{ color: "var(--win)" }}>W</th>
-                <th className="px-4 py-3 text-center" style={{ color: "var(--loss)" }}>L</th>
-                <th className="px-4 py-3 text-center" style={{ color: "var(--tie)" }}>T</th>
-                <th className="px-4 py-3 text-center font-bold" style={{ color: "var(--accent)" }}>PTS</th>
-                <th className="px-4 py-3"></th>
-                <th className="px-4 py-3"></th>
-              </tr>
-            </thead>
-            <tbody>
-              {standings.map((row, i) => {
-                const isDeleting = deletingTeamId === row.team.id;
-                return (
-                  <tr
-                    key={row.team.id}
-                    style={{ background: i % 2 === 0 ? "var(--surface)" : "var(--surface-2)", opacity: isDeleting ? 0.4 : 1 }}
-                  >
-                    <td className="px-4 py-3" style={{ color: "var(--muted)" }}>{i + 1}</td>
-                    <td className="px-4 py-3 font-medium">
-                      <Link
-                        href={`/leagues/${id}/teams/${row.team.id}`}
-                        className="hover:underline"
-                        style={{ color: "var(--foreground)" }}
-                      >
-                        {row.team.name}
-                      </Link>
-                    </td>
-                    <td className="px-4 py-3 text-center" style={{ color: "var(--muted)" }}>{row.gp}</td>
-                    <td className="px-4 py-3 text-center" style={{ color: "var(--win)" }}>{row.w}</td>
-                    <td className="px-4 py-3 text-center" style={{ color: "var(--loss)" }}>{row.l}</td>
-                    <td className="px-4 py-3 text-center" style={{ color: "var(--tie)" }}>{row.t}</td>
-                    <td className="px-4 py-3 text-center font-bold" style={{ color: "var(--accent)" }}>{row.pts}</td>
-                    <td className="px-4 py-3 text-right">
-                      <Link
-                        href={`/leagues/${id}/teams/${row.team.id}`}
-                        className="px-3 py-1.5 rounded-lg text-xs font-semibold"
-                        style={{ background: "var(--surface-2)", color: "var(--muted)", border: "1px solid var(--border)" }}
-                      >
-                        Roster & Stats ›
-                      </Link>
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      <button
-                        onClick={() => setConfirmDeleteTeam(row.team)}
-                        disabled={isDeleting}
-                        className="cursor-pointer p-1.5 rounded-lg disabled:opacity-30 hover:opacity-70 transition-opacity"
-                        style={{ color: "var(--loss)" }}
-                        title="Delete team"
-                      >
-                        <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                          <polyline points="3 6 5 6 21 6" />
-                          <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
-                          <path d="M10 11v6" />
-                          <path d="M14 11v6" />
-                          <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
-                        </svg>
-                      </button>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+          <StandingsTable
+            rows={standings}
+            leagueId={id}
+            variant="compact"
+            dimmedTeamId={deletingTeamId}
+            actions={(row) => (
+              <>
+                <Link
+                  href={`/leagues/${id}/teams/${row.team.id}`}
+                  className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-surface-2 text-muted border border-border"
+                >
+                  Roster & Stats ›
+                </Link>
+                <button
+                  onClick={() => setConfirmDeleteTeam(row.team)}
+                  disabled={deletingTeamId === row.team.id}
+                  className="cursor-pointer p-1.5 rounded-lg disabled:opacity-30 hover:opacity-70 transition-opacity text-loss"
+                  title="Delete team"
+                  aria-label={`Delete ${row.team.name}`}
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="3 6 5 6 21 6" />
+                    <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+                    <path d="M10 11v6" />
+                    <path d="M14 11v6" />
+                    <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
+                  </svg>
+                </button>
+              </>
+            )}
+          />
         )}
 
         {/* Add team form */}

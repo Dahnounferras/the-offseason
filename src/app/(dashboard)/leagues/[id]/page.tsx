@@ -13,6 +13,7 @@ import ConfirmModal from "@/components/ui/ConfirmModal";
 import Modal from "@/components/ui/Modal";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
+import StandingsTable from "@/components/league/StandingsTable";
 
 const CARD_H = 80;
 const MATCH_GAP = 24;
@@ -360,58 +361,7 @@ export default function LeaguePage() {
         <div className="lg:col-span-2">
           <h2 className="font-semibold mb-3">Standings</h2>
           <div className="rounded-xl overflow-hidden" style={{ border: "1px solid var(--border)" }}>
-            <table className="w-full text-sm">
-              <thead>
-                <tr style={{ background: "var(--surface-2)" }}>
-                  <th className="text-left px-4 py-3">#</th>
-                  <th className="text-left px-4 py-3">Team</th>
-                  <th className="px-4 py-3 text-center">GP</th>
-                  <th className="px-4 py-3 text-center">W</th>
-                  <th className="px-4 py-3 text-center">L</th>
-                  <th className="px-4 py-3 text-center">T</th>
-                  <th className="px-4 py-3 text-center font-bold" style={{ color: "var(--accent)" }}>PTS</th>
-                  <th className="px-4 py-3 text-center">PF</th>
-                  <th className="px-4 py-3 text-center">PA</th>
-                  <th className="px-4 py-3 text-center">RTG</th>
-                </tr>
-              </thead>
-              <tbody>
-                {standings.length === 0 && (
-                  <tr>
-                    <td colSpan={10} className="text-center py-8" style={{ color: "var(--muted)" }}>
-                      No teams yet. Add teams below.
-                    </td>
-                  </tr>
-                )}
-                {standings.map((row, i) => (
-                  <tr
-                    key={row.team.id}
-                    style={{ background: i % 2 === 0 ? "var(--surface)" : "var(--surface-2)" }}
-                  >
-                    <td className="px-4 py-3" style={{ color: "var(--muted)" }}>{i + 1}</td>
-                    <td className="px-4 py-3 font-medium">
-                      <Link
-                        href={`/leagues/${id}/teams/${row.team.id}`}
-                        className="hover:underline"
-                        style={{ color: "var(--foreground)" }}
-                      >
-                        {row.team.name}
-                      </Link>
-                    </td>
-                    <td className="px-4 py-3 text-center" style={{ color: "var(--muted)" }}>{row.gp}</td>
-                    <td className="px-4 py-3 text-center" style={{ color: "var(--win)" }}>{row.w}</td>
-                    <td className="px-4 py-3 text-center" style={{ color: "var(--loss)" }}>{row.l}</td>
-                    <td className="px-4 py-3 text-center" style={{ color: "var(--tie)" }}>{row.t}</td>
-                    <td className="px-4 py-3 text-center font-bold" style={{ color: "var(--accent)" }}>{row.pts}</td>
-                    <td className="px-4 py-3 text-center" style={{ color: "var(--muted)" }}>{row.pf}</td>
-                    <td className="px-4 py-3 text-center" style={{ color: "var(--muted)" }}>{row.pa}</td>
-                    <td className="px-4 py-3 text-center" style={{ color: "var(--muted)" }}>
-                      {row.sportCount > 0 ? (row.sportSum / row.sportCount).toFixed(1) : "—"}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <StandingsTable rows={standings} leagueId={id} emptyMessage="No teams yet. Add teams below." />
           </div>
         </div>
 

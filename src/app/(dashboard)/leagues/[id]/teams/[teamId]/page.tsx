@@ -9,6 +9,8 @@ import { computeStandings } from "@/lib/standings";
 import { getSportConfig } from "@/lib/sportConfig";
 import Spinner from "@/components/Spinner";
 import ConfirmModal from "@/components/ui/ConfirmModal";
+import { computeSeasonTotals, perGame } from "@/lib/stats";
+import { StatHeaderCells, StatValueCell } from "@/components/league/statCells";
 
 export default function TeamDetailPage() {
   const { id, teamId } = useParams<{ id: string; teamId: string }>();
@@ -137,27 +139,8 @@ export default function TeamDetailPage() {
 
   const teamStanding = standings.find((row) => row.team.id === teamId);
 
-  const playedGames = useMemo(() => games.filter((g) => g.status === "played"), [games]);
-
-  const seasonTotals = useMemo(() => {
-    type TotalsEntry = { [key: string]: number; gp: number };
-    const totals: Record<string, TotalsEntry> = {};
-    for (const game of playedGames) {
-      if (game.homeTeamId !== teamId && game.awayTeamId !== teamId) continue;
-      for (const sl of game.statLines ?? []) {
-        const player = players.find((p) => p.id === sl.playerId);
-        if (!player) continue;
-        if (!totals[sl.playerId]) {
-          totals[sl.playerId] = { gp: 0, ...Object.fromEntries(statKeys.map((k) => [k, 0])) };
-        }
-        for (const k of statKeys) {
-          totals[sl.playerId][k] = (totals[sl.playerId][k] ?? 0) + (sl.stats[k] ?? 0);
-        }
-        totals[sl.playerId].gp += 1;
-      }
-    }
-    return totals;
-  }, [playedGames, players, teamId, statKeys]);
+  // A player's stat lines only exist in their own team's games, so league-wide totals are this roster's.
+  const seasonTotals = useMemo(() => computeSeasonTotals(games, statKeys), [games, statKeys]);
 
   const rosterRows = [...players].sort((a, b) => {
     const aStats = seasonTotals[a.id];
@@ -223,18 +206,7 @@ export default function TeamDetailPage() {
                 <th className="text-left px-4 py-3" style={{ color: "var(--muted)" }}>#</th>
                 <th className="text-left px-4 py-3">Player</th>
                 <th className="px-4 py-3 text-center" style={{ color: "var(--muted)" }}>GP</th>
-                {statKeys.map((k) => (
-                  <th
-                    key={k}
-                    className="px-4 py-3 text-center"
-                    style={{
-                      color: k === sportConfig.primaryStat ? "var(--accent)" : "var(--muted)",
-                      fontWeight: k === sportConfig.primaryStat ? 700 : 400,
-                    }}
-                  >
-                    {sportConfig.statLabels[k]?.abbrev ?? k.toUpperCase()}
-                  </th>
-                ))}
+                <StatHeaderCells sportConfig={sportConfig} className="px-4 py-3" />
                 <th className="px-4 py-3 text-center" style={{ color: "var(--muted)" }}>
                   {sportConfig.computedStatLabel}
                 </th>
@@ -333,21 +305,12 @@ export default function TeamDetailPage() {
                     </td>
                     <td className="px-4 py-3 text-center" style={{ color: "var(--muted)" }}>{totals?.gp ?? 0}</td>
                     {statKeys.map((k) => (
-                      <td
-                        key={k}
-                        className="px-4 py-3 text-center"
-                        style={{
-                          color: k === sportConfig.primaryStat ? "var(--accent)" : "var(--muted)",
-                          fontWeight: k === sportConfig.primaryStat ? 600 : 400,
-                        }}
-                      >
+                      <StatValueCell key={k} sportConfig={sportConfig} statKey={k} className="px-4 py-3">
                         {totals ? (totals[k] ?? 0) : "—"}
-                      </td>
+                      </StatValueCell>
                     ))}
                     <td className="px-4 py-3 text-center" style={{ color: "var(--muted)" }}>
-                      {totals && totals.gp > 0
-                        ? ((totals[sportConfig.primaryStat] ?? 0) / totals.gp).toFixed(1)
-                        : "—"}
+                      {perGame(totals, sportConfig.primaryStat)}
                     </td>
                     <td className="px-4 py-3 text-right">
                       <button
