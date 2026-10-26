@@ -169,6 +169,7 @@ export default function LeaguePage() {
     await resetLeague(id);
     const updated = await getGames(id);
     setGames(updated);
+    setBracket(null);
     setActioning(false);
     setShowResetModal(false);
   }
@@ -855,7 +856,7 @@ export default function LeaguePage() {
           >
             <h2 className="text-lg font-bold mb-2">Reset this league?</h2>
             <p className="text-sm mb-6" style={{ color: "var(--muted)" }}>
-              All game results and player stats will be cleared. Teams and rosters are kept. The schedule will need to be re-generated.
+              All game results, player stats and the tournament bracket will be cleared. Teams and rosters are kept. The schedule will need to be re-generated.
             </p>
             <div className="flex gap-3">
               <button

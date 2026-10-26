@@ -40,17 +40,33 @@ describe("computeSeedings", () => {
     expect(result).toHaveLength(2);
   });
 
-  it("treats undefined scores as ties (current behavior — scheduled games with no scores)", () => {
+  it("ignores scheduled (unplayed) games", () => {
+    const teams = [makeTeam("A"), makeTeam("B"), makeTeam("C")];
+    const scheduled = (id: string, home: string, away: string): Game => ({
+      id, homeTeamId: home, awayTeamId: away, status: "scheduled", statLines: [],
+    });
+    const games = [
+      makeGame("C", "B", 2, 1),
+      scheduled("s1", "A", "B"),
+      scheduled("s2", "A", "B"),
+    ];
+    // Counting scheduled games as 0-0 ties would put A (2 pts) level with C.
+    expect(computeSeedings(teams, games, rules)[0].id).toBe("C");
+  });
+
+  it("matches the standings tiebreak (wins) when points are equal", () => {
+    const tieRules = { win: 2, tie: 2, loss: 0 };
+    const teams = [makeTeam("A"), makeTeam("B"), makeTeam("C")];
+    const games = [makeGame("A", "C", 1, 1), makeGame("B", "C", 3, 0)];
+    // A and B both have 2 pts; B has the win.
+    const result = computeSeedings(teams, games, tieRules);
+    expect(result.map((t) => t.id).slice(0, 2)).toEqual(["B", "A"]);
+  });
+
+  it("does not mutate the input array", () => {
     const teams = [makeTeam("A"), makeTeam("B")];
-    const scheduledGame: Game = {
-      id: "g1", homeTeamId: "A", awayTeamId: "B",
-      status: "scheduled", statLines: [],
-    };
-    const result = computeSeedings(teams, [scheduledGame], rules);
-    const aPoints = result.find((t) => t.id === "A");
-    const bPoints = result.find((t) => t.id === "B");
-    expect(aPoints).toBeDefined();
-    expect(bPoints).toBeDefined();
+    computeSeedings(teams, [makeGame("B", "A", 2, 0)], rules);
+    expect(teams.map((t) => t.id)).toEqual(["A", "B"]);
   });
 });
 

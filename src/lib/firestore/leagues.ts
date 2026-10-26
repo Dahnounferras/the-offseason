@@ -8,11 +8,23 @@ import {
   deleteDoc,
   query,
   where,
-  serverTimestamp,
   deleteField,
+  writeBatch,
+  type WriteBatch,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import type { League, Team, Game, Bracket, Player, StatLine } from "@/types";
+
+// Firestore caps a single write batch at 500 operations.
+const BATCH_LIMIT = 500;
+
+async function commitInChunks(ops: ((batch: WriteBatch) => void)[]): Promise<void> {
+  for (let i = 0; i < ops.length; i += BATCH_LIMIT) {
+    const batch = writeBatch(db);
+    ops.slice(i, i + BATCH_LIMIT).forEach((op) => op(batch));
+    await batch.commit();
+  }
+}
 
 export async function getLeague(leagueId: string): Promise<League | null> {
   const snap = await getDoc(doc(db, "leagues", leagueId));
@@ -60,11 +72,24 @@ export async function addTeam(
   return ref.id;
 }
 
+// Removes the team along with its roster and every game it plays in, so no
+// orphaned games are left behind for standings to silently skip.
 export async function deleteTeam(
   leagueId: string,
   teamId: string
 ): Promise<void> {
-  await deleteDoc(doc(db, "leagues", leagueId, "teams", teamId));
+  const games = collection(db, "leagues", leagueId, "games");
+  const [players, homeGames, awayGames] = await Promise.all([
+    getDocs(collection(db, "leagues", leagueId, "teams", teamId, "players")),
+    getDocs(query(games, where("homeTeamId", "==", teamId))),
+    getDocs(query(games, where("awayTeamId", "==", teamId))),
+  ]);
+  const refs = [...players.docs, ...homeGames.docs, ...awayGames.docs].map((d) => d.ref);
+  await commitInChunks([
+    ...refs.map((ref) => (b: WriteBatch) => b.delete(ref)),
+    // Team doc goes last so a failed run can simply be retried.
+    (b) => b.delete(doc(db, "leagues", leagueId, "teams", teamId)),
+  ]);
 }
 
 export async function getGames(leagueId: string): Promise<Game[]> {
@@ -173,18 +198,22 @@ export async function reactivateLeague(leagueId: string): Promise<void> {
 }
 
 export async function resetLeague(leagueId: string): Promise<void> {
-  const gamesSnap = await getDocs(collection(db, "leagues", leagueId, "games"));
-  await Promise.all(gamesSnap.docs.map((d) => deleteDoc(d.ref)));
-
-  const teamsSnap = await getDocs(collection(db, "leagues", leagueId, "teams"));
-  await Promise.all(
-    teamsSnap.docs.map(async (teamDoc) => {
-      const playersSnap = await getDocs(
-        collection(db, "leagues", leagueId, "teams", teamDoc.id, "players")
-      );
-      await Promise.all(playersSnap.docs.map((p) => updateDoc(p.ref, { stats: {} })));
-    })
+  const [gamesSnap, bracketsSnap, teamsSnap] = await Promise.all([
+    getDocs(collection(db, "leagues", leagueId, "games")),
+    getDocs(collection(db, "leagues", leagueId, "brackets")),
+    getDocs(collection(db, "leagues", leagueId, "teams")),
+  ]);
+  const playerSnaps = await Promise.all(
+    teamsSnap.docs.map((teamDoc) =>
+      getDocs(collection(db, "leagues", leagueId, "teams", teamDoc.id, "players"))
+    )
   );
+  await commitInChunks([
+    ...[...gamesSnap.docs, ...bracketsSnap.docs].map((d) => (b: WriteBatch) => b.delete(d.ref)),
+    ...playerSnaps.flatMap((snap) =>
+      snap.docs.map((p) => (b: WriteBatch) => b.update(p.ref, { stats: {} }))
+    ),
+  ]);
 }
 
 export async function deleteLeague(leagueId: string): Promise<void> {

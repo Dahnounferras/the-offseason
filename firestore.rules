@@ -1,0 +1,44 @@
+rules_version = '2';
+
+// Every read and write in the app happens client-side, so these rules are the
+// only thing stopping one user from reading or editing another user's league.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function leagueData(leagueId) {
+      return get(/databases/$(database)/documents/leagues/$(leagueId)).data;
+    }
+
+    function ownsLeague(leagueId) {
+      return signedIn() && leagueData(leagueId).ownerId == request.auth.uid;
+    }
+
+    match /leagues/{leagueId} {
+      // Owners can always read; anyone can read a league marked public.
+      allow read: if resource.data.get('isPublic', false) == true
+                  || (signedIn() && resource.data.ownerId == request.auth.uid);
+
+      allow create: if signedIn() && request.resource.data.ownerId == request.auth.uid;
+
+      // Ownership can't be transferred by editing the doc.
+      allow update: if signedIn()
+                    && resource.data.ownerId == request.auth.uid
+                    && request.resource.data.ownerId == resource.data.ownerId;
+
+      allow delete: if signedIn() && resource.data.ownerId == request.auth.uid;
+
+      // teams, teams/*/players, games, brackets. The explicit {subcollection}
+      // segment matters: a bare {path=**} also matches zero segments, which
+      // would apply these rules to the league doc itself.
+      match /{subcollection}/{docPath=**} {
+        allow read: if leagueData(leagueId).get('isPublic', false) == true
+                    || ownsLeague(leagueId);
+        allow write: if ownsLeague(leagueId);
+      }
+    }
+  }
+}

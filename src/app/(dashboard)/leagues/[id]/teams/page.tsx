@@ -196,7 +196,7 @@ export default function TeamsPage() {
             <h2 className="text-lg font-bold mb-2">Delete team?</h2>
             <p className="text-sm mb-6" style={{ color: "var(--muted)" }}>
               <span style={{ color: "var(--foreground)", fontWeight: 500 }}>{confirmDeleteTeam.name}</span>{" "}
-              will be permanently removed. This cannot be undone.
+              will be permanently removed, along with its roster and every game it plays in. This cannot be undone.
             </p>
             <div className="flex gap-3">
               <button

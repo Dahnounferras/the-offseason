@@ -1,27 +1,14 @@
 import type { Team, Game, League, BracketMatchup } from "@/types";
+import { computeStandings } from "@/lib/standings";
 
+// Seeds follow the standings table exactly (same scoring, same tiebreaks,
+// unplayed games ignored) so the bracket never disagrees with it.
 export function computeSeedings(
   teams: Team[],
   games: Game[],
   scoringRules: League["scoringRules"]
 ): Team[] {
-  const map: Record<string, number> = {};
-  for (const t of teams) map[t.id] = 0;
-  for (const g of games) {
-    const hs = g.homeScore ?? 0;
-    const as_ = g.awayScore ?? 0;
-    if (hs > as_) {
-      map[g.homeTeamId] = (map[g.homeTeamId] ?? 0) + scoringRules.win;
-      map[g.awayTeamId] = (map[g.awayTeamId] ?? 0) + scoringRules.loss;
-    } else if (as_ > hs) {
-      map[g.awayTeamId] = (map[g.awayTeamId] ?? 0) + scoringRules.win;
-      map[g.homeTeamId] = (map[g.homeTeamId] ?? 0) + scoringRules.loss;
-    } else {
-      map[g.homeTeamId] = (map[g.homeTeamId] ?? 0) + scoringRules.tie;
-      map[g.awayTeamId] = (map[g.awayTeamId] ?? 0) + scoringRules.tie;
-    }
-  }
-  return teams.sort((a, b) => (map[b.id] ?? 0) - (map[a.id] ?? 0));
+  return computeStandings(teams, games, scoringRules).map((row) => row.team);
 }
 
 export function generateBracket(seededTeams: Team[]): BracketMatchup[][] {

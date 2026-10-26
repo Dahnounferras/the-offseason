@@ -1,13 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import {
   getDoc, getDocs, addDoc, updateDoc, deleteDoc,
-  doc, collection, query, where, deleteField,
+  doc, where, deleteField, writeBatch,
 } from "firebase/firestore";
 import {
-  getLeague, getUserLeagues, createLeague, updateLeague,
-  getTeams, addTeam, getGames, scheduleGames,
-  recordResult, updateResult, getPlayers, addPlayer, updatePlayer,
-  endLeague, reactivateLeague, deleteLeague,
+  getLeague, getUserLeagues, createLeague,
+  addTeam, deleteTeam, scheduleGames,
+  recordResult, updateResult, updatePlayer,
+  endLeague, reactivateLeague, deleteLeague, resetLeague,
   getBracket, saveBracket, deleteBracket, updateBracket,
 } from "@/lib/firestore/leagues";
 import { makeDocSnap, makeEmptyDocSnap, makeQuerySnap } from "@/test/mocks/firebase";
@@ -22,13 +22,31 @@ vi.mock("firebase/firestore", () => ({
   collection: vi.fn((_, ...segs) => ({ path: segs.join("/") })),
   query: vi.fn((...args) => args[0]),
   where: vi.fn((...args) => args),
-  serverTimestamp: vi.fn(() => ({ _type: "serverTimestamp" })),
   deleteField: vi.fn(() => ({ _type: "deleteField" })),
+  writeBatch: vi.fn(),
 }));
 
 vi.mock("@/lib/firebase", () => ({ db: {}, auth: {} }));
 
-beforeEach(() => vi.clearAllMocks());
+type MockBatch = { delete: ReturnType<typeof vi.fn>; update: ReturnType<typeof vi.fn>; commit: ReturnType<typeof vi.fn> };
+let batches: MockBatch[] = [];
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  batches = [];
+  vi.mocked(writeBatch).mockImplementation(() => {
+    const b = { delete: vi.fn(), update: vi.fn(), commit: vi.fn().mockResolvedValue(undefined) };
+    batches.push(b);
+    return b as never;
+  });
+});
+
+const refSnap = (paths: string[]) => ({
+  empty: paths.length === 0,
+  docs: paths.map((path) => ({ id: path.split("/").pop(), ref: { path }, data: () => ({}) })),
+});
+
+const deletedPaths = () => batches.flatMap((b) => b.delete.mock.calls.map(([ref]) => ref.path));
 
 describe("getLeague", () => {
   it("returns league with id when document exists", async () => {
@@ -273,5 +291,50 @@ describe("deleteBracket", () => {
     vi.mocked(deleteDoc).mockResolvedValueOnce(undefined);
     await deleteBracket("l1", "b1");
     expect(deleteDoc).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("deleteTeam", () => {
+  it("deletes the team's players, its home and away games, then the team", async () => {
+    vi.mocked(getDocs)
+      .mockResolvedValueOnce(refSnap(["l1/teams/t1/players/p1"]) as never)
+      .mockResolvedValueOnce(refSnap(["l1/games/g1"]) as never)
+      .mockResolvedValueOnce(refSnap(["l1/games/g2"]) as never);
+    await deleteTeam("l1", "t1");
+    expect(where).toHaveBeenCalledWith("homeTeamId", "==", "t1");
+    expect(where).toHaveBeenCalledWith("awayTeamId", "==", "t1");
+    expect(deletedPaths()).toEqual([
+      "l1/teams/t1/players/p1",
+      "l1/games/g1",
+      "l1/games/g2",
+      "leagues/l1/teams/t1",
+    ]);
+    expect(batches.every((b) => b.commit.mock.calls.length === 1)).toBe(true);
+  });
+
+  it("splits more than 500 deletes across batches", async () => {
+    const games = Array.from({ length: 600 }, (_, i) => `l1/games/g${i}`);
+    vi.mocked(getDocs)
+      .mockResolvedValueOnce(refSnap([]) as never)
+      .mockResolvedValueOnce(refSnap(games) as never)
+      .mockResolvedValueOnce(refSnap([]) as never);
+    await deleteTeam("l1", "t1");
+    expect(batches).toHaveLength(2);
+    expect(batches[0].delete).toHaveBeenCalledTimes(500);
+    expect(batches[1].delete).toHaveBeenCalledTimes(101);
+  });
+});
+
+describe("resetLeague", () => {
+  it("deletes games and brackets and clears player stats", async () => {
+    vi.mocked(getDocs)
+      .mockResolvedValueOnce(refSnap(["l1/games/g1"]) as never)
+      .mockResolvedValueOnce(refSnap(["l1/brackets/b1"]) as never)
+      .mockResolvedValueOnce(refSnap(["l1/teams/t1"]) as never)
+      .mockResolvedValueOnce(refSnap(["l1/teams/t1/players/p1"]) as never);
+    await resetLeague("l1");
+    expect(deletedPaths()).toEqual(["l1/games/g1", "l1/brackets/b1"]);
+    expect(batches[0].update).toHaveBeenCalledWith({ path: "l1/teams/t1/players/p1" }, { stats: {} });
+    expect(batches[0].commit).toHaveBeenCalledTimes(1);
   });
 });
