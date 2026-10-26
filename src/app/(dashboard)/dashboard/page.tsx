@@ -160,7 +160,7 @@ export default function DashboardPage() {
               <select
                 value={form.sport}
                 onChange={(e) => setForm({ ...form, sport: e.target.value })}
-                className={`${inputClasses} w-full`}
+                className={`${inputClasses()} w-full`}
               >
                 {SPORTS.map((s) => <option key={s}>{s}</option>)}
               </select>

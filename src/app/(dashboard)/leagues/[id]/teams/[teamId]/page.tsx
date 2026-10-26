@@ -3,14 +3,15 @@
 import { useEffect, useState, useMemo } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import { getLeague, getTeams, getGames, getPlayers, addPlayer, updatePlayer, deletePlayer } from "@/lib/firestore/leagues";
+import { getLeague, getTeams, getGames, getPlayers } from "@/lib/firestore/leagues";
 import type { League, Team, Game, Player } from "@/types";
 import { computeStandings } from "@/lib/standings";
 import { getSportConfig } from "@/lib/sportConfig";
-import Spinner from "@/components/Spinner";
 import ConfirmModal from "@/components/ui/ConfirmModal";
 import { computeSeasonTotals, perGame } from "@/lib/stats";
 import { StatHeaderCells, StatValueCell } from "@/components/league/statCells";
+import PlayerForm from "@/components/league/PlayerForm";
+import { useRoster } from "@/hooks/useRoster";
 
 export default function TeamDetailPage() {
   const { id, teamId } = useParams<{ id: string; teamId: string }>();
@@ -18,16 +19,8 @@ export default function TeamDetailPage() {
   const [teams, setTeams] = useState<Team[]>([]);
   const [games, setGames] = useState<Game[]>([]);
   const [players, setPlayers] = useState<Player[]>([]);
-  const [playerForm, setPlayerForm] = useState({ firstName: "", lastName: "", jerseyNumber: "" });
-  const [addingPlayer, setAddingPlayer] = useState(false);
-  const [addError, setAddError] = useState<string | null>(null);
-  const [editingPlayer, setEditingPlayer] = useState<Player | null>(null);
-  const [editForm, setEditForm] = useState({ firstName: "", lastName: "", jerseyNumber: "" });
-  const [editError, setEditError] = useState<string | null>(null);
-  const [savingPlayer, setSavingPlayer] = useState(false);
-  const [deletingPlayerId, setDeletingPlayerId] = useState<string | null>(null);
   const [confirmDeletePlayer, setConfirmDeletePlayer] = useState<Player | null>(null);
-  const [deletingModal, setDeletingModal] = useState(false);
+  const roster = useRoster(id, teamId, players, setPlayers);
 
   useEffect(() => {
     Promise.all([getLeague(id), getTeams(id), getGames(id), getPlayers(id, teamId)]).then(
@@ -40,88 +33,10 @@ export default function TeamDetailPage() {
     );
   }, [id, teamId]);
 
-  function jerseyTaken(num: number, excludePlayerId?: string): boolean {
-    return players.some(
-      (p) => p.jerseyNumber === num && p.id !== excludePlayerId
-    );
-  }
-
-  async function handleSavePlayer() {
-    if (!editingPlayer || !editForm.firstName.trim() || !editForm.lastName.trim()) return;
-    if (editForm.jerseyNumber.trim()) {
-      const num = Number(editForm.jerseyNumber);
-      if (jerseyTaken(num, editingPlayer.id)) {
-        setEditError(`Jersey #${num} is already taken by another player.`);
-        return;
-      }
-    }
-    setEditError(null);
-    setSavingPlayer(true);
-    try {
-      const clearJersey = !editForm.jerseyNumber.trim() && editingPlayer.jerseyNumber !== undefined;
-      const data: Parameters<typeof updatePlayer>[3] = {
-        firstName: editForm.firstName.trim(),
-        lastName: editForm.lastName.trim(),
-      };
-      if (editForm.jerseyNumber.trim()) {
-        data.jerseyNumber = Number(editForm.jerseyNumber);
-      }
-      await updatePlayer(id, teamId, editingPlayer.id, data, clearJersey);
-      setPlayers((prev) =>
-        prev.map((p) => {
-          if (p.id !== editingPlayer.id) return p;
-          const next = { ...p, ...data };
-          if (clearJersey) delete next.jerseyNumber;
-          return next;
-        })
-      );
-      setEditingPlayer(null);
-    } finally {
-      setSavingPlayer(false);
-    }
-  }
-
-  async function handleAddPlayer() {
-    if (!playerForm.firstName.trim() || !playerForm.lastName.trim()) return;
-    if (playerForm.jerseyNumber.trim()) {
-      const num = Number(playerForm.jerseyNumber);
-      if (jerseyTaken(num)) {
-        setAddError(`Jersey #${num} is already taken by another player.`);
-        return;
-      }
-    }
-    setAddError(null);
-    setAddingPlayer(true);
-    try {
-      const data: Parameters<typeof addPlayer>[2] = {
-        firstName: playerForm.firstName.trim(),
-        lastName: playerForm.lastName.trim(),
-        teamId,
-      };
-      if (playerForm.jerseyNumber.trim()) {
-        data.jerseyNumber = Number(playerForm.jerseyNumber);
-      }
-      await addPlayer(id, teamId, data);
-      const updated = await getPlayers(id, teamId);
-      setPlayers(updated);
-      setPlayerForm({ firstName: "", lastName: "", jerseyNumber: "" });
-    } finally {
-      setAddingPlayer(false);
-    }
-  }
-
   async function handleDeletePlayer() {
     if (!confirmDeletePlayer) return;
-    setDeletingModal(true);
-    setDeletingPlayerId(confirmDeletePlayer.id);
-    try {
-      await deletePlayer(id, teamId, confirmDeletePlayer.id);
-      setPlayers((prev) => prev.filter((p) => p.id !== confirmDeletePlayer.id));
-      setConfirmDeletePlayer(null);
-    } finally {
-      setDeletingPlayerId(null);
-      setDeletingModal(false);
-    }
+    await roster.remove(confirmDeletePlayer);
+    setConfirmDeletePlayer(null);
   }
 
   const team = teams.find((t) => t.id === teamId) ?? null;
@@ -216,70 +131,32 @@ export default function TeamDetailPage() {
             <tbody>
               {rosterRows.map((player, i) => {
                 const totals = seasonTotals[player.id];
-                const isEditing = editingPlayer?.id === player.id;
-                const isDeleting = deletingPlayerId === player.id;
+                const isEditing = roster.editing?.id === player.id;
+                const isDeleting = roster.removingId === player.id;
                 const rowBg = i % 2 === 0 ? "var(--surface)" : "var(--surface-2)";
 
                 if (isEditing) {
                   return (
                     <tr key={player.id} style={{ background: rowBg }}>
                       <td colSpan={statKeys.length + 5} className="px-4 py-3">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <input
-                            type="text"
-                            value={editForm.firstName}
-                            onChange={(e) => { setEditError(null); setEditForm({ ...editForm, firstName: e.target.value }); }}
-                            placeholder="First name"
-                            className="px-3 py-1.5 rounded-lg text-sm outline-none"
-                            style={{ background: "var(--surface-2)", border: "1px solid var(--accent)", color: "var(--foreground)", minWidth: 110 }}
-                          />
-                          <input
-                            type="text"
-                            value={editForm.lastName}
-                            onChange={(e) => { setEditError(null); setEditForm({ ...editForm, lastName: e.target.value }); }}
-                            placeholder="Last name"
-                            className="px-3 py-1.5 rounded-lg text-sm outline-none"
-                            style={{ background: "var(--surface-2)", border: "1px solid var(--accent)", color: "var(--foreground)", minWidth: 110 }}
-                          />
-                          <input
-                            type="number"
-                            value={editForm.jerseyNumber}
-                            onChange={(e) => { setEditError(null); setEditForm({ ...editForm, jerseyNumber: e.target.value }); }}
-                            placeholder="Jersey # (optional)"
-                            className="px-3 py-1.5 rounded-lg text-sm outline-none"
-                            style={{
-                              background: "var(--surface-2)",
-                              border: `1px solid ${editError ? "var(--loss)" : "var(--accent)"}`,
-                              color: "var(--foreground)",
-                              width: 150,
-                            }}
-                          />
-                          <button
-                            onClick={() => { setEditingPlayer(null); setEditError(null); }}
-                            className="cursor-pointer px-3 py-1.5 rounded-lg text-sm"
-                            style={{ background: "var(--surface-2)", color: "var(--muted)", border: "1px solid var(--border)" }}
-                          >
-                            Cancel
-                          </button>
-                          <button
-                            onClick={handleSavePlayer}
-                            disabled={savingPlayer || !editForm.firstName.trim() || !editForm.lastName.trim()}
-                            className="cursor-pointer px-3 py-1.5 rounded-lg text-sm font-semibold disabled:opacity-50"
-                            style={{ background: "var(--accent)", color: "#000" }}
-                          >
-                            {savingPlayer ? <><Spinner /> Saving…</> : "Save"}
-                          </button>
-                        </div>
-                        {editError && (
-                          <p className="mt-2 text-xs" style={{ color: "var(--loss)" }}>{editError}</p>
-                        )}
+                        <PlayerForm
+                          editing
+                          values={roster.editForm}
+                          onChange={roster.setEditForm}
+                          onSubmit={roster.save}
+                          onCancel={roster.cancelEdit}
+                          submitting={roster.saving}
+                          submitLabel="Save"
+                          submittingLabel="Saving…"
+                          error={roster.editError}
+                        />
                       </td>
                     </tr>
                   );
                 }
 
                 return (
-                  <tr key={player.id} style={{ background: rowBg, opacity: isDeleting ? 0.4 : 1 }}>
+                  <tr key={player.id} className="group" style={{ background: rowBg, opacity: isDeleting ? 0.4 : 1 }}>
                     <td className="px-4 py-3 font-mono text-xs" style={{ color: "var(--accent)" }}>
                       {player.jerseyNumber !== undefined ? `#${player.jerseyNumber}` : ""}
                     </td>
@@ -287,16 +164,8 @@ export default function TeamDetailPage() {
                       <div className="flex items-center gap-2">
                         <span>{player.firstName} {player.lastName}</span>
                         <button
-                          onClick={() => {
-                            setEditingPlayer(player);
-                            setEditError(null);
-                            setEditForm({
-                              firstName: player.firstName,
-                              lastName: player.lastName,
-                              jerseyNumber: player.jerseyNumber !== undefined ? String(player.jerseyNumber) : "",
-                            });
-                          }}
-                          className="cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity px-2 py-0.5 rounded text-xs"
+                          onClick={() => roster.startEdit(player)}
+                          className="cursor-pointer opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity px-2 py-0.5 rounded text-xs"
                           style={{ color: "var(--muted)", background: "var(--surface)" }}
                         >
                           Edit
@@ -341,51 +210,15 @@ export default function TeamDetailPage() {
           <p className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: "var(--muted)" }}>
             Add a player
           </p>
-          <div className="flex gap-2 flex-wrap">
-            <input
-              type="text"
-              placeholder="First name"
-              value={playerForm.firstName}
-              onChange={(e) => { setAddError(null); setPlayerForm({ ...playerForm, firstName: e.target.value }); }}
-              onKeyDown={(e) => e.key === "Enter" && handleAddPlayer()}
-              className="px-3 py-2 rounded-lg text-sm outline-none"
-              style={{ background: "var(--surface-2)", border: "1px solid var(--border)", color: "var(--foreground)", minWidth: 120 }}
-            />
-            <input
-              type="text"
-              placeholder="Last name"
-              value={playerForm.lastName}
-              onChange={(e) => { setAddError(null); setPlayerForm({ ...playerForm, lastName: e.target.value }); }}
-              onKeyDown={(e) => e.key === "Enter" && handleAddPlayer()}
-              className="px-3 py-2 rounded-lg text-sm outline-none"
-              style={{ background: "var(--surface-2)", border: "1px solid var(--border)", color: "var(--foreground)", minWidth: 120 }}
-            />
-            <input
-              type="number"
-              placeholder="Jersey # (optional)"
-              value={playerForm.jerseyNumber}
-              onChange={(e) => { setAddError(null); setPlayerForm({ ...playerForm, jerseyNumber: e.target.value }); }}
-              onKeyDown={(e) => e.key === "Enter" && handleAddPlayer()}
-              className="px-3 py-2 rounded-lg text-sm outline-none"
-              style={{
-                background: "var(--surface-2)",
-                border: `1px solid ${addError ? "var(--loss)" : "var(--border)"}`,
-                color: "var(--foreground)",
-                width: 160,
-              }}
-            />
-            <button
-              onClick={handleAddPlayer}
-              disabled={addingPlayer || !playerForm.firstName.trim() || !playerForm.lastName.trim()}
-              className="cursor-pointer px-4 py-2 rounded-lg text-sm font-semibold disabled:opacity-50"
-              style={{ background: "var(--accent)", color: "#000" }}
-            >
-              {addingPlayer ? <><Spinner /> Adding…</> : "Add"}
-            </button>
-          </div>
-          {addError && (
-            <p className="mt-2 text-xs" style={{ color: "var(--loss)" }}>{addError}</p>
-          )}
+          <PlayerForm
+            values={roster.addForm}
+            onChange={roster.setAddForm}
+            onSubmit={roster.add}
+            submitting={roster.adding}
+            submitLabel="Add"
+            submittingLabel="Adding…"
+            error={roster.addError}
+          />
         </div>
       </div>
       {confirmDeletePlayer && (
@@ -393,7 +226,7 @@ export default function TeamDetailPage() {
           title="Remove player?"
           confirmLabel="Remove"
           busyLabel="Removing…"
-          busy={deletingModal}
+          busy={roster.removingId === confirmDeletePlayer.id}
           onConfirm={handleDeletePlayer}
           onCancel={() => setConfirmDeletePlayer(null)}
         >

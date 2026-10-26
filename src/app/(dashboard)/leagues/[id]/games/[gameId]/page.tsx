@@ -17,6 +17,7 @@ import { getSportConfig } from "@/lib/sportConfig";
 import Spinner from "@/components/Spinner";
 import { buildStatDraft, draftToStatLines, type StatDraft } from "@/lib/stats";
 import StatGrid from "@/components/league/StatGrid";
+import { sortByJersey } from "@/lib/roster";
 
 export default function GameDetailPage() {
   const { id, gameId } = useParams<{ id: string; gameId: string }>();
@@ -47,8 +48,8 @@ export default function GameDetailPage() {
           getPlayers(id, found.homeTeamId),
           getPlayers(id, found.awayTeamId),
         ]);
-        setHomePlayers(hp.sort((a, b) => (a.jerseyNumber ?? 999) - (b.jerseyNumber ?? 999)));
-        setAwayPlayers(ap.sort((a, b) => (a.jerseyNumber ?? 999) - (b.jerseyNumber ?? 999)));
+        setHomePlayers(sortByJersey(hp));
+        setAwayPlayers(sortByJersey(ap));
       }
     });
   }, [id, gameId]);

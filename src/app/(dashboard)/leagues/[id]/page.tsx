@@ -4,8 +4,8 @@ import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { getLeague, getTeams, getGames, addTeam, getBracket, getPlayers, addPlayer, updatePlayer, scheduleGames, endLeague, deleteLeague, reactivateLeague, resetLeague } from "@/lib/firestore/leagues";
-import type { League, Team, Game, Bracket, Player } from "@/types";
+import { getLeague, getTeams, getGames, addTeam, getBracket, scheduleGames, endLeague, deleteLeague, reactivateLeague, resetLeague } from "@/lib/firestore/leagues";
+import type { League, Team, Game, Bracket } from "@/types";
 import { generateSchedule } from "@/lib/schedule";
 import { computeStandings } from "@/lib/standings";
 import Spinner from "@/components/Spinner";
@@ -15,6 +15,7 @@ import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
 import StandingsTable from "@/components/league/StandingsTable";
 import BracketView from "@/components/league/BracketView";
+import RosterEditor from "@/components/league/RosterEditor";
 
 export default function LeaguePage() {
   const { id } = useParams<{ id: string }>();
@@ -26,12 +27,6 @@ export default function LeaguePage() {
   const [newTeamName, setNewTeamName] = useState("");
   const [addingTeam, setAddingTeam] = useState(false);
   const [rosterTeam, setRosterTeam] = useState<Team | null>(null);
-  const [players, setPlayers] = useState<Player[]>([]);
-  const [playerForm, setPlayerForm] = useState({ firstName: "", lastName: "", jerseyNumber: "" });
-  const [addingPlayer, setAddingPlayer] = useState(false);
-  const [editingPlayer, setEditingPlayer] = useState<Player | null>(null);
-  const [editForm, setEditForm] = useState({ firstName: "", lastName: "", jerseyNumber: "" });
-  const [savingPlayer, setSavingPlayer] = useState(false);
   const [starting, setStarting] = useState(false);
   const [showEndModal, setShowEndModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -56,61 +51,6 @@ export default function LeaguePage() {
     setTeams(updated);
     setNewTeamName("");
     setAddingTeam(false);
-  }
-
-  async function openRoster(team: Team) {
-    setRosterTeam(team);
-    setPlayerForm({ firstName: "", lastName: "", jerseyNumber: "" });
-    const fetched = await getPlayers(id, team.id);
-    setPlayers(fetched);
-  }
-
-  async function handleAddPlayer() {
-    if (!rosterTeam || !playerForm.firstName.trim() || !playerForm.lastName.trim()) return;
-    setAddingPlayer(true);
-    try {
-      const playerData: Parameters<typeof addPlayer>[2] = {
-        firstName: playerForm.firstName.trim(),
-        lastName: playerForm.lastName.trim(),
-        teamId: rosterTeam.id,
-      };
-      if (playerForm.jerseyNumber.trim()) {
-        playerData.jerseyNumber = Number(playerForm.jerseyNumber);
-      }
-      await addPlayer(id, rosterTeam.id, playerData);
-      const updated = await getPlayers(id, rosterTeam.id);
-      setPlayers(updated);
-      setPlayerForm({ firstName: "", lastName: "", jerseyNumber: "" });
-    } finally {
-      setAddingPlayer(false);
-    }
-  }
-
-  async function handleSavePlayer() {
-    if (!rosterTeam || !editingPlayer || !editForm.firstName.trim() || !editForm.lastName.trim()) return;
-    setSavingPlayer(true);
-    try {
-      const clearJersey = !editForm.jerseyNumber.trim() && editingPlayer.jerseyNumber !== undefined;
-      const data: Parameters<typeof updatePlayer>[3] = {
-        firstName: editForm.firstName.trim(),
-        lastName: editForm.lastName.trim(),
-      };
-      if (editForm.jerseyNumber.trim()) {
-        data.jerseyNumber = Number(editForm.jerseyNumber);
-      }
-      await updatePlayer(id, rosterTeam.id, editingPlayer.id, data, clearJersey);
-      setPlayers((prev) =>
-        prev.map((p) => {
-          if (p.id !== editingPlayer.id) return p;
-          const next = { ...p, ...data };
-          if (clearJersey) delete next.jerseyNumber;
-          return next;
-        })
-      );
-      setEditingPlayer(null);
-    } finally {
-      setSavingPlayer(false);
-    }
   }
 
   async function handleStartLeague() {
@@ -345,7 +285,7 @@ export default function LeaguePage() {
               {teams.map((t) => (
                 <button
                   key={t.id}
-                  onClick={() => openRoster(t)}
+                  onClick={() => setRosterTeam(t)}
                   className="cursor-pointer w-full text-left text-sm py-2 px-2 rounded-lg flex items-center justify-between transition-colors hover:opacity-80"
                   style={{ background: "var(--surface-2)", color: "var(--foreground)" }}
                 >
@@ -408,157 +348,7 @@ export default function LeaguePage() {
       {/* Roster modal */}
       {rosterTeam && (
         <Modal size="md" className="flex flex-col max-h-[80vh]" onClose={() => setRosterTeam(null)}>
-          {/* Header */}
-          <div className="flex items-center justify-between px-6 py-4" style={{ borderBottom: "1px solid var(--border)" }}>
-            <div>
-              <h2 className="text-lg font-bold">{rosterTeam.name}</h2>
-              <p className="text-xs" style={{ color: "var(--muted)" }}>Roster</p>
-            </div>
-            <button
-              onClick={() => setRosterTeam(null)}
-              className="cursor-pointer text-lg leading-none px-2 py-1 rounded-lg hover:opacity-70"
-              style={{ color: "var(--muted)", background: "var(--surface-2)" }}
-            >
-              ✕
-            </button>
-          </div>
-
-          {/* Player list */}
-          <div className="overflow-y-auto flex-1 px-6 py-4">
-            {players.length === 0 ? (
-              <p className="text-sm text-center py-6" style={{ color: "var(--muted)" }}>
-                No players yet. Add one below.
-              </p>
-            ) : (
-              <div className="space-y-2">
-                {players.map((p) =>
-                  editingPlayer?.id === p.id ? (
-                    <div
-                      key={p.id}
-                      className="flex flex-col gap-2 p-3 rounded-lg"
-                      style={{ background: "var(--surface-2)", border: "1px solid var(--accent)" }}
-                    >
-                      <div className="flex gap-2">
-                        <input
-                          type="text"
-                          value={editForm.firstName}
-                          onChange={(e) => setEditForm({ ...editForm, firstName: e.target.value })}
-                          placeholder="First name"
-                          className="flex-1 px-3 py-1.5 rounded-lg text-sm outline-none"
-                          style={{ background: "var(--surface)", border: "1px solid var(--border)", color: "var(--foreground)" }}
-                        />
-                        <input
-                          type="text"
-                          value={editForm.lastName}
-                          onChange={(e) => setEditForm({ ...editForm, lastName: e.target.value })}
-                          placeholder="Last name"
-                          className="flex-1 px-3 py-1.5 rounded-lg text-sm outline-none"
-                          style={{ background: "var(--surface)", border: "1px solid var(--border)", color: "var(--foreground)" }}
-                        />
-                      </div>
-                      <div className="flex gap-2">
-                        <input
-                          type="number"
-                          value={editForm.jerseyNumber}
-                          onChange={(e) => setEditForm({ ...editForm, jerseyNumber: e.target.value })}
-                          placeholder="Jersey # (optional)"
-                          className="flex-1 px-3 py-1.5 rounded-lg text-sm outline-none"
-                          style={{ background: "var(--surface)", border: "1px solid var(--border)", color: "var(--foreground)" }}
-                        />
-                        <button
-                          onClick={() => setEditingPlayer(null)}
-                          className="cursor-pointer px-3 py-1.5 rounded-lg text-sm"
-                          style={{ background: "var(--surface)", color: "var(--muted)", border: "1px solid var(--border)" }}
-                        >
-                          Cancel
-                        </button>
-                        <button
-                          onClick={handleSavePlayer}
-                          disabled={savingPlayer || !editForm.firstName.trim() || !editForm.lastName.trim()}
-                          className="cursor-pointer px-3 py-1.5 rounded-lg text-sm font-semibold disabled:opacity-50"
-                          style={{ background: "var(--accent)", color: "#000" }}
-                        >
-                          {savingPlayer ? <><Spinner /> Saving…</> : "Save"}
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    <div
-                      key={p.id}
-                      className="flex items-center gap-3 text-sm py-2 px-3 rounded-lg group"
-                      style={{ background: "var(--surface-2)" }}
-                    >
-                      {p.jerseyNumber !== undefined && (
-                        <span className="font-mono font-semibold text-xs w-8 text-center shrink-0" style={{ color: "var(--accent)" }}>
-                          #{p.jerseyNumber}
-                        </span>
-                      )}
-                      <span className={`flex-1 ${p.jerseyNumber === undefined ? "ml-11" : ""}`}>
-                        {p.firstName} {p.lastName}
-                      </span>
-                      <button
-                        onClick={() => {
-                          setEditingPlayer(p);
-                          setEditForm({
-                            firstName: p.firstName,
-                            lastName: p.lastName,
-                            jerseyNumber: p.jerseyNumber !== undefined ? String(p.jerseyNumber) : "",
-                          });
-                        }}
-                        className="cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity px-2 py-1 rounded text-xs"
-                        style={{ color: "var(--muted)", background: "var(--surface)" }}
-                      >
-                        Edit
-                      </button>
-                    </div>
-                  )
-                )}
-              </div>
-            )}
-          </div>
-
-          {/* Add player form */}
-          <div className="px-6 py-4" style={{ borderTop: "1px solid var(--border)" }}>
-            <p className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: "var(--muted)" }}>
-              Add a player
-            </p>
-            <div className="flex gap-2 mb-2">
-              <input
-                type="text"
-                placeholder="First name"
-                value={playerForm.firstName}
-                onChange={(e) => setPlayerForm({ ...playerForm, firstName: e.target.value })}
-                className="flex-1 px-3 py-2 rounded-lg text-sm outline-none"
-                style={{ background: "var(--surface-2)", border: "1px solid var(--border)", color: "var(--foreground)" }}
-              />
-              <input
-                type="text"
-                placeholder="Last name"
-                value={playerForm.lastName}
-                onChange={(e) => setPlayerForm({ ...playerForm, lastName: e.target.value })}
-                className="flex-1 px-3 py-2 rounded-lg text-sm outline-none"
-                style={{ background: "var(--surface-2)", border: "1px solid var(--border)", color: "var(--foreground)" }}
-              />
-            </div>
-            <div className="flex gap-2">
-              <input
-                type="number"
-                placeholder="Jersey # (optional)"
-                value={playerForm.jerseyNumber}
-                onChange={(e) => setPlayerForm({ ...playerForm, jerseyNumber: e.target.value })}
-                className="flex-1 px-3 py-2 rounded-lg text-sm outline-none"
-                style={{ background: "var(--surface-2)", border: "1px solid var(--border)", color: "var(--foreground)" }}
-              />
-              <button
-                onClick={handleAddPlayer}
-                disabled={addingPlayer || !playerForm.firstName.trim() || !playerForm.lastName.trim()}
-                className="cursor-pointer px-4 py-2 rounded-lg text-sm font-semibold disabled:opacity-50"
-                style={{ background: "var(--accent)", color: "#000" }}
-              >
-                {addingPlayer ? <><Spinner /> Adding…</> : "Add"}
-              </button>
-            </div>
-          </div>
+          <RosterEditor key={rosterTeam.id} leagueId={id} team={rosterTeam} onClose={() => setRosterTeam(null)} />
         </Modal>
       )}
 
