@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import Image from "next/image";
 import { signInWithPopup, GoogleAuthProvider } from "firebase/auth";
 import { auth } from "@/lib/firebase";
 import { useAuth } from "@/hooks/useAuth";
@@ -53,7 +54,7 @@ export default function LoginPage() {
           fontSize: "0.95rem",
         }}
       >
-        <img src="/logo.png" alt="" style={{ width: 28, height: 28, borderRadius: 7 }} />
+        <Image src="/logo.png" alt="" width={28} height={28} style={{ borderRadius: 7 }} />
         The Offseason
       </Link>
       <div

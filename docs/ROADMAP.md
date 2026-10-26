@@ -8,8 +8,8 @@ Living plan from the October 2026 repo review. Update it as items land.
 |---|---|---|
 | 1 | Commit WIP (spinners, reset league) | ✅ Done (`4d90863`) |
 | 2 | Seeding bug, Firestore security rules, reset/delete cleanup | ✅ Done |
-| 3 | Dead code + tooling cleanup, CI | ⏳ Next |
-| 4 | Extract shared components + league data hook | |
+| 3 | Dead code + tooling cleanup, CI | ✅ Done |
+| 4 | Extract shared components + league data hook | ⏳ Next |
 | 5 | UX pass (tab bar, toasts, mobile) | |
 | 6 | Public league pages | |
 
@@ -30,7 +30,26 @@ Do step 4 before step 5. Most UI exists in 2–4 copies right now, so every UX c
 - **League delete is still a soft delete** (`status: "deleted"`). Its data stays forever, and the league page still renders it if someone visits the URL. Decide between a hard delete (cascade like `deleteTeam`) and keeping soft delete with a "trash/restore" UI.
 - **Deleting a team that's in a bracket** leaves its ID in the bracket, which renders as "TBD". Either block team deletion while a bracket exists or clear the bracket too.
 
-## Step 3: cleanup & tooling
+## Step 3: what changed
+
+- Removed dead fields from the types and from every write: `Player.stats`, `Team.wins/losses/ties` and `League.season.currentGame`. `addGame`, which had no callers, is gone. `resetLeague` now only deletes games and brackets. Existing Firestore docs still contain the old fields. Nothing reads them, so they don't need a migration.
+- `getGames` maps a missing `status` to `"played"` (legacy games), and `Game.status` is now required. Every page and `computeStandings` use `status === "played"`, so overview, games, stats, team and standings all count the same games.
+- `next/image` for the logo. The remote Google avatar in `HomeNav` keeps `<img>` with a targeted lint disable.
+- Vitest uses `resolve.tsconfigPaths` (Vite 8) in place of `vite-tsconfig-paths`. Added a `typecheck` script.
+- Deleted the `create-next-app` SVGs. Rewrote `README.md` (setup, env vars, rules deploy, scripts). Added `.env.example`.
+- CI: `.github/workflows/ci.yml` runs lint (`--max-warnings=0`), typecheck and tests on pushes to `main` and on PRs.
+
+### Follow-ups from step 3
+
+- **Browser smoke test (not done yet).** Lint, typecheck, tests, `next build` and CI all pass, and `/`, `/login` and `/dashboard` returned 200 on the dev server. Nobody has clicked through the signed-in app yet. With `npm run dev`, signed in:
+  - Create a league, add two teams and a player, start the season, and record a result.
+  - Check that the overview "games played" count, the games list, the stats page, the team page and the standings all agree.
+  - If you have a league with games from before scheduling existed (no `status` field), check that those games now show up on the stats and team pages too. That is the one intended behavior change.
+  - Reset League: games and the bracket are cleared, and teams and players stay.
+  - The logo renders on the landing, login and dashboard pages.
+- The Firestore rules deploy from step 2 is still pending (see "Follow-ups from step 2").
+
+## Step 3: original checklist
 
 - Dead data fields:
   - `Player.stats` is never written; stats live in `game.statLines`. `resetLeague` still clears it, so remove both.

@@ -56,6 +56,8 @@ export default function HomeNav() {
             }}
           >
             {user.photoURL ? (
+              // Remote Google avatar; next/image would need remotePatterns for a 28px icon.
+              // eslint-disable-next-line @next/next/no-img-element
               <img
                 src={user.photoURL}
                 alt={user.displayName ?? ""}

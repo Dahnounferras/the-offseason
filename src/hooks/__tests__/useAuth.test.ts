@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { renderHook, act } from "@testing-library/react";
+import { renderHook } from "@testing-library/react";
 import { onAuthStateChanged } from "firebase/auth";
 import { useAuth } from "@/hooks/useAuth";
 

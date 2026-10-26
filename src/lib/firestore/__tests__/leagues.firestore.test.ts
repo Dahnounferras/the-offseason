@@ -4,7 +4,7 @@ import {
   doc, where, deleteField, writeBatch,
 } from "firebase/firestore";
 import {
-  getLeague, getUserLeagues, createLeague,
+  getLeague, getUserLeagues, createLeague, getGames,
   addTeam, deleteTeam, scheduleGames,
   recordResult, updateResult, updatePlayer,
   endLeague, reactivateLeague, deleteLeague, resetLeague,
@@ -98,24 +98,38 @@ describe("getUserLeagues", () => {
 describe("createLeague", () => {
   it("calls addDoc with createdAt as a number", async () => {
     vi.mocked(addDoc).mockResolvedValueOnce({ id: "new-id" } as never);
-    await createLeague({ name: "Fall League", sport: "Football", ownerId: "u1", isPublic: false, season: { totalGames: 10, currentGame: 0 }, scoringRules: { win: 2, tie: 1, loss: 0 } });
-    const payload = vi.mocked(addDoc).mock.calls[0][1] as Record<string, unknown>;
+    await createLeague({ name: "Fall League", sport: "Football", ownerId: "u1", isPublic: false, season: { totalGames: 10 }, scoringRules: { win: 2, tie: 1, loss: 0 } });
+    const payload = vi.mocked(addDoc).mock.calls[0][1] as unknown as Record<string, unknown>;
     expect(typeof payload.createdAt).toBe("number");
   });
 
   it("returns the new document id", async () => {
     vi.mocked(addDoc).mockResolvedValueOnce({ id: "created-123" } as never);
-    const id = await createLeague({ name: "X", sport: "Soccer", ownerId: "u1", isPublic: false, season: { totalGames: 5, currentGame: 0 }, scoringRules: { win: 2, tie: 1, loss: 0 } });
+    const id = await createLeague({ name: "X", sport: "Soccer", ownerId: "u1", isPublic: false, season: { totalGames: 5 }, scoringRules: { win: 2, tie: 1, loss: 0 } });
     expect(id).toBe("created-123");
   });
 });
 
+describe("getGames", () => {
+  it("treats legacy games without a status as played", async () => {
+    vi.mocked(getDocs).mockResolvedValueOnce(
+      makeQuerySnap([
+        { id: "g1", data: { homeTeamId: "A", awayTeamId: "B", homeScore: 1, awayScore: 0 } },
+        { id: "g2", data: { homeTeamId: "A", awayTeamId: "B", status: "scheduled" } },
+      ]) as never
+    );
+    const [legacy, scheduled] = await getGames("l1");
+    expect(legacy).toMatchObject({ id: "g1", status: "played" });
+    expect(scheduled).toMatchObject({ id: "g2", status: "scheduled" });
+  });
+});
+
 describe("addTeam", () => {
-  it("creates team with default win/loss/ties of 0", async () => {
+  it("creates team with just a name", async () => {
     vi.mocked(addDoc).mockResolvedValueOnce({ id: "team-1" } as never);
     await addTeam("league-1", "Hawks");
-    const payload = vi.mocked(addDoc).mock.calls[0][1] as Record<string, unknown>;
-    expect(payload).toMatchObject({ name: "Hawks", wins: 0, losses: 0, ties: 0 });
+    const payload = vi.mocked(addDoc).mock.calls[0][1] as unknown as Record<string, unknown>;
+    expect(payload).toEqual({ name: "Hawks" });
   });
 
   it("returns the new team id", async () => {
@@ -139,7 +153,7 @@ describe("scheduleGames", () => {
   it("includes status: scheduled and statLines: [] in each game", async () => {
     vi.mocked(addDoc).mockResolvedValue({ id: "g" } as never);
     await scheduleGames("league-1", [{ homeTeamId: "A", awayTeamId: "B", gameNumber: 1 }]);
-    const payload = vi.mocked(addDoc).mock.calls[0][1] as Record<string, unknown>;
+    const payload = vi.mocked(addDoc).mock.calls[0][1] as unknown as Record<string, unknown>;
     expect(payload.status).toBe("scheduled");
     expect(payload.statLines).toEqual([]);
   });
@@ -149,7 +163,7 @@ describe("recordResult", () => {
   it("includes status: played and playedAt as a number", async () => {
     vi.mocked(updateDoc).mockResolvedValueOnce(undefined);
     await recordResult("l1", "g1", 3, 1);
-    const payload = vi.mocked(updateDoc).mock.calls[0][1] as Record<string, unknown>;
+    const payload = vi.mocked(updateDoc).mock.calls[0][1] as unknown as Record<string, unknown>;
     expect(payload.status).toBe("played");
     expect(typeof payload.playedAt).toBe("number");
     expect(payload.homeScore).toBe(3);
@@ -159,7 +173,7 @@ describe("recordResult", () => {
   it("includes sportsmanship when provided", async () => {
     vi.mocked(updateDoc).mockResolvedValueOnce(undefined);
     await recordResult("l1", "g1", 3, 1, 4, 5);
-    const payload = vi.mocked(updateDoc).mock.calls[0][1] as Record<string, unknown>;
+    const payload = vi.mocked(updateDoc).mock.calls[0][1] as unknown as Record<string, unknown>;
     expect(payload.homeSportsmanship).toBe(4);
     expect(payload.awaySportsmanship).toBe(5);
   });
@@ -167,7 +181,7 @@ describe("recordResult", () => {
   it("omits sportsmanship fields when not provided", async () => {
     vi.mocked(updateDoc).mockResolvedValueOnce(undefined);
     await recordResult("l1", "g1", 3, 1);
-    const payload = vi.mocked(updateDoc).mock.calls[0][1] as Record<string, unknown>;
+    const payload = vi.mocked(updateDoc).mock.calls[0][1] as unknown as Record<string, unknown>;
     expect("homeSportsmanship" in payload).toBe(false);
     expect("awaySportsmanship" in payload).toBe(false);
   });
@@ -177,7 +191,7 @@ describe("updateResult", () => {
   it("only includes homeScore and awayScore (no status, no playedAt)", async () => {
     vi.mocked(updateDoc).mockResolvedValueOnce(undefined);
     await updateResult("l1", "g1", 5, 2);
-    const payload = vi.mocked(updateDoc).mock.calls[0][1] as Record<string, unknown>;
+    const payload = vi.mocked(updateDoc).mock.calls[0][1] as unknown as Record<string, unknown>;
     expect(payload.homeScore).toBe(5);
     expect(payload.awayScore).toBe(2);
     expect("status" in payload).toBe(false);
@@ -187,7 +201,7 @@ describe("updateResult", () => {
   it("includes sportsmanship fields when provided", async () => {
     vi.mocked(updateDoc).mockResolvedValueOnce(undefined);
     await updateResult("l1", "g1", 2, 3, 3, 4);
-    const payload = vi.mocked(updateDoc).mock.calls[0][1] as Record<string, unknown>;
+    const payload = vi.mocked(updateDoc).mock.calls[0][1] as unknown as Record<string, unknown>;
     expect(payload.homeSportsmanship).toBe(3);
     expect(payload.awaySportsmanship).toBe(4);
   });
@@ -197,21 +211,21 @@ describe("endLeague / reactivateLeague / deleteLeague", () => {
   it("endLeague calls updateDoc with status: ended", async () => {
     vi.mocked(updateDoc).mockResolvedValueOnce(undefined);
     await endLeague("l1");
-    const payload = vi.mocked(updateDoc).mock.calls[0][1] as Record<string, unknown>;
+    const payload = vi.mocked(updateDoc).mock.calls[0][1] as unknown as Record<string, unknown>;
     expect(payload.status).toBe("ended");
   });
 
   it("reactivateLeague calls updateDoc with status: active", async () => {
     vi.mocked(updateDoc).mockResolvedValueOnce(undefined);
     await reactivateLeague("l1");
-    const payload = vi.mocked(updateDoc).mock.calls[0][1] as Record<string, unknown>;
+    const payload = vi.mocked(updateDoc).mock.calls[0][1] as unknown as Record<string, unknown>;
     expect(payload.status).toBe("active");
   });
 
   it("deleteLeague calls updateDoc with status: deleted", async () => {
     vi.mocked(updateDoc).mockResolvedValueOnce(undefined);
     await deleteLeague("l1");
-    const payload = vi.mocked(updateDoc).mock.calls[0][1] as Record<string, unknown>;
+    const payload = vi.mocked(updateDoc).mock.calls[0][1] as unknown as Record<string, unknown>;
     expect(payload.status).toBe("deleted");
   });
 });
@@ -221,14 +235,14 @@ describe("updatePlayer", () => {
     vi.mocked(updateDoc).mockResolvedValueOnce(undefined);
     vi.mocked(deleteField).mockReturnValue({ _type: "deleteField" } as never);
     await updatePlayer("l1", "t1", "p1", { firstName: "John" }, true);
-    const payload = vi.mocked(updateDoc).mock.calls[0][1] as Record<string, unknown>;
+    const payload = vi.mocked(updateDoc).mock.calls[0][1] as unknown as Record<string, unknown>;
     expect(payload.jerseyNumber).toEqual({ _type: "deleteField" });
   });
 
   it("does not include jerseyNumber key when clearJerseyNumber is false", async () => {
     vi.mocked(updateDoc).mockResolvedValueOnce(undefined);
     await updatePlayer("l1", "t1", "p1", { firstName: "Jane" }, false);
-    const payload = vi.mocked(updateDoc).mock.calls[0][1] as Record<string, unknown>;
+    const payload = vi.mocked(updateDoc).mock.calls[0][1] as unknown as Record<string, unknown>;
     expect("jerseyNumber" in payload).toBe(false);
   });
 });
@@ -265,7 +279,7 @@ describe("saveBracket", () => {
     vi.mocked(addDoc).mockResolvedValueOnce({ id: "bracket-new" } as never);
     const rounds = [[{ homeTeamId: "A", awayTeamId: "B", winnerId: null }]];
     await saveBracket("l1", { rounds, generatedAt: 123, status: "active" });
-    const payload = vi.mocked(addDoc).mock.calls[0][1] as Record<string, unknown>;
+    const payload = vi.mocked(addDoc).mock.calls[0][1] as unknown as Record<string, unknown>;
     expect(payload.rounds).toEqual([{ matchups: rounds[0] }]);
   });
 
@@ -281,7 +295,7 @@ describe("updateBracket", () => {
     vi.mocked(updateDoc).mockResolvedValueOnce(undefined);
     const rounds = [[{ homeTeamId: "A", awayTeamId: "B", winnerId: "A" }]];
     await updateBracket("l1", "b1", rounds);
-    const payload = vi.mocked(updateDoc).mock.calls[0][1] as Record<string, unknown>;
+    const payload = vi.mocked(updateDoc).mock.calls[0][1] as unknown as Record<string, unknown>;
     expect(payload.rounds).toEqual([{ matchups: rounds[0] }]);
   });
 });
@@ -326,15 +340,12 @@ describe("deleteTeam", () => {
 });
 
 describe("resetLeague", () => {
-  it("deletes games and brackets and clears player stats", async () => {
+  it("deletes games and brackets", async () => {
     vi.mocked(getDocs)
       .mockResolvedValueOnce(refSnap(["l1/games/g1"]) as never)
-      .mockResolvedValueOnce(refSnap(["l1/brackets/b1"]) as never)
-      .mockResolvedValueOnce(refSnap(["l1/teams/t1"]) as never)
-      .mockResolvedValueOnce(refSnap(["l1/teams/t1/players/p1"]) as never);
+      .mockResolvedValueOnce(refSnap(["l1/brackets/b1"]) as never);
     await resetLeague("l1");
     expect(deletedPaths()).toEqual(["l1/games/g1", "l1/brackets/b1"]);
-    expect(batches[0].update).toHaveBeenCalledWith({ path: "l1/teams/t1/players/p1" }, { stats: {} });
     expect(batches[0].commit).toHaveBeenCalledTimes(1);
   });
 });

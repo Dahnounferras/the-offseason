@@ -98,7 +98,6 @@ export default function LeaguePage() {
         firstName: playerForm.firstName.trim(),
         lastName: playerForm.lastName.trim(),
         teamId: rosterTeam.id,
-        stats: {},
       };
       if (playerForm.jerseyNumber.trim()) {
         playerData.jerseyNumber = Number(playerForm.jerseyNumber);
@@ -209,7 +208,7 @@ export default function LeaguePage() {
             <p className="text-sm" style={{ color: "var(--muted)" }}>
               <span style={{ color: "var(--accent)" }}>{league.sport}</span>
               {games.length > 0 && (
-                <> &bull; {games.filter((g) => g.status === "played" || !g.status).length} / {league.season.totalGames} games played</>
+                <> &bull; {games.filter((g) => g.status === "played").length} / {league.season.totalGames} games played</>
               )}
             </p>
           </div>

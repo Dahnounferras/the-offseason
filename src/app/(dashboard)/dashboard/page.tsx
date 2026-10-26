@@ -31,7 +31,7 @@ export default function DashboardPage() {
       name: form.name.trim(),
       sport: form.sport === "Other" ? form.customSport.trim() || "Other" : form.sport,
       ownerId: user.uid,
-      season: { totalGames: form.totalGames, currentGame: 0 },
+      season: { totalGames: form.totalGames },
       scoringRules: { win: 2, tie: 1, loss: 0 },
       isPublic: false,
     });

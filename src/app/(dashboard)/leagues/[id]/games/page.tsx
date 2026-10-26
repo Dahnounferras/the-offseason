@@ -25,7 +25,7 @@ export default function GamesPage() {
   if (!league) return <div className="py-20 text-center" style={{ color: "var(--muted)" }}>Loading…</div>;
 
   const scheduled = games.filter((g) => g.status === "scheduled");
-  const played = games.filter((g) => g.status === "played" || !g.status).sort((a, b) => (b.gameNumber ?? 0) - (a.gameNumber ?? 0));
+  const played = games.filter((g) => g.status === "played").sort((a, b) => (b.gameNumber ?? 0) - (a.gameNumber ?? 0));
 
   return (
     <div>

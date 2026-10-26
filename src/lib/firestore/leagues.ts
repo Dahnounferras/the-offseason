@@ -65,9 +65,6 @@ export async function addTeam(
 ): Promise<string> {
   const ref = await addDoc(collection(db, "leagues", leagueId, "teams"), {
     name,
-    wins: 0,
-    losses: 0,
-    ties: 0,
   });
   return ref.id;
 }
@@ -94,18 +91,11 @@ export async function deleteTeam(
 
 export async function getGames(leagueId: string): Promise<Game[]> {
   const snap = await getDocs(collection(db, "leagues", leagueId, "games"));
-  return snap.docs.map((d) => ({ id: d.id, ...d.data() } as Game));
-}
-
-export async function addGame(
-  leagueId: string,
-  game: Omit<Game, "id">
-): Promise<string> {
-  const ref = await addDoc(
-    collection(db, "leagues", leagueId, "games"),
-    game
-  );
-  return ref.id;
+  // Games created before scheduling existed have no status; they were always played.
+  return snap.docs.map((d) => {
+    const data = d.data();
+    return { id: d.id, ...data, status: data.status ?? "played" } as Game;
+  });
 }
 
 export async function scheduleGames(
@@ -160,7 +150,7 @@ export async function updatePlayer(
   leagueId: string,
   teamId: string,
   playerId: string,
-  data: Partial<Omit<Player, "id" | "teamId" | "stats">>,
+  data: Partial<Omit<Player, "id" | "teamId">>,
   clearJerseyNumber = false
 ): Promise<void> {
   await updateDoc(doc(db, "leagues", leagueId, "teams", teamId, "players", playerId), {
@@ -198,22 +188,13 @@ export async function reactivateLeague(leagueId: string): Promise<void> {
 }
 
 export async function resetLeague(leagueId: string): Promise<void> {
-  const [gamesSnap, bracketsSnap, teamsSnap] = await Promise.all([
+  const [gamesSnap, bracketsSnap] = await Promise.all([
     getDocs(collection(db, "leagues", leagueId, "games")),
     getDocs(collection(db, "leagues", leagueId, "brackets")),
-    getDocs(collection(db, "leagues", leagueId, "teams")),
   ]);
-  const playerSnaps = await Promise.all(
-    teamsSnap.docs.map((teamDoc) =>
-      getDocs(collection(db, "leagues", leagueId, "teams", teamDoc.id, "players"))
-    )
+  await commitInChunks(
+    [...gamesSnap.docs, ...bracketsSnap.docs].map((d) => (b: WriteBatch) => b.delete(d.ref))
   );
-  await commitInChunks([
-    ...[...gamesSnap.docs, ...bracketsSnap.docs].map((d) => (b: WriteBatch) => b.delete(d.ref)),
-    ...playerSnaps.flatMap((snap) =>
-      snap.docs.map((p) => (b: WriteBatch) => b.update(p.ref, { stats: {} }))
-    ),
-  ]);
 }
 
 export async function deleteLeague(leagueId: string): Promise<void> {

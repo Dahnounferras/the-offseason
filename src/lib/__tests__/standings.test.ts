@@ -4,15 +4,16 @@ import type { Team, Game, League } from "@/types";
 
 const rules: League["scoringRules"] = { win: 2, tie: 1, loss: 0 };
 
-const teamA: Team = { id: "A", name: "Alpha", wins: 0, losses: 0, ties: 0 };
-const teamB: Team = { id: "B", name: "Beta", wins: 0, losses: 0, ties: 0 };
-const teamC: Team = { id: "C", name: "Gamma", wins: 0, losses: 0, ties: 0 };
+const teamA: Team = { id: "A", name: "Alpha" };
+const teamB: Team = { id: "B", name: "Beta" };
+const teamC: Team = { id: "C", name: "Gamma" };
 
 function makeGame(overrides: Partial<Game>): Game {
   return {
     id: "g1",
     homeTeamId: "A",
     awayTeamId: "B",
+    status: "played",
     statLines: [],
     ...overrides,
   };

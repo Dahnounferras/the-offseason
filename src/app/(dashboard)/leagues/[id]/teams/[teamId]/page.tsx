@@ -94,7 +94,6 @@ export default function TeamDetailPage() {
         firstName: playerForm.firstName.trim(),
         lastName: playerForm.lastName.trim(),
         teamId,
-        stats: {},
       };
       if (playerForm.jerseyNumber.trim()) {
         data.jerseyNumber = Number(playerForm.jerseyNumber);
