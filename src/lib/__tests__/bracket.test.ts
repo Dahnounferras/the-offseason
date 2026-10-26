@@ -9,7 +9,7 @@ function makeTeam(id: string): Team {
 }
 
 function makeGame(homeTeamId: string, awayTeamId: string, homeScore: number, awayScore: number): Game {
-  return { id: `${homeTeamId}v${awayTeamId}`, homeTeamId, awayTeamId, homeScore, awayScore, statLines: [] };
+  return { id: `${homeTeamId}v${awayTeamId}`, homeTeamId, awayTeamId, homeScore, awayScore, status: "played", statLines: [] };
 }
 
 describe("computeSeedings", () => {

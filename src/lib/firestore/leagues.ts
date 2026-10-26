@@ -91,7 +91,11 @@ export async function deleteTeam(
 
 export async function getGames(leagueId: string): Promise<Game[]> {
   const snap = await getDocs(collection(db, "leagues", leagueId, "games"));
-  return snap.docs.map((d) => ({ id: d.id, ...d.data() } as Game));
+  // Games created before scheduling existed have no status; they were always played.
+  return snap.docs.map((d) => {
+    const data = d.data();
+    return { id: d.id, ...data, status: data.status ?? "played" } as Game;
+  });
 }
 
 export async function scheduleGames(

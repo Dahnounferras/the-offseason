@@ -34,7 +34,7 @@ export interface Game {
   homeTeamId: string;
   awayTeamId: string;
   gameNumber?: number;
-  status?: "scheduled" | "played";
+  status: "scheduled" | "played";
   homeScore?: number;
   awayScore?: number;
   homeSportsmanship?: number;

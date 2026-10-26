@@ -22,7 +22,7 @@ export function computeStandings(
   for (const t of teams) {
     map[t.id] = { team: t, pts: 0, w: 0, l: 0, t: 0, gp: 0, pf: 0, pa: 0, sportSum: 0, sportCount: 0 };
   }
-  const playedGames = games.filter((g) => g.status !== "scheduled");
+  const playedGames = games.filter((g) => g.status === "played");
   for (const g of playedGames) {
     const home = map[g.homeTeamId];
     const away = map[g.awayTeamId];

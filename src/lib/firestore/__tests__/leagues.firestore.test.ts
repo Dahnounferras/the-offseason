@@ -4,7 +4,7 @@ import {
   doc, where, deleteField, writeBatch,
 } from "firebase/firestore";
 import {
-  getLeague, getUserLeagues, createLeague,
+  getLeague, getUserLeagues, createLeague, getGames,
   addTeam, deleteTeam, scheduleGames,
   recordResult, updateResult, updatePlayer,
   endLeague, reactivateLeague, deleteLeague, resetLeague,
@@ -107,6 +107,20 @@ describe("createLeague", () => {
     vi.mocked(addDoc).mockResolvedValueOnce({ id: "created-123" } as never);
     const id = await createLeague({ name: "X", sport: "Soccer", ownerId: "u1", isPublic: false, season: { totalGames: 5 }, scoringRules: { win: 2, tie: 1, loss: 0 } });
     expect(id).toBe("created-123");
+  });
+});
+
+describe("getGames", () => {
+  it("treats legacy games without a status as played", async () => {
+    vi.mocked(getDocs).mockResolvedValueOnce(
+      makeQuerySnap([
+        { id: "g1", data: { homeTeamId: "A", awayTeamId: "B", homeScore: 1, awayScore: 0 } },
+        { id: "g2", data: { homeTeamId: "A", awayTeamId: "B", status: "scheduled" } },
+      ]) as never
+    );
+    const [legacy, scheduled] = await getGames("l1");
+    expect(legacy).toMatchObject({ id: "g1", status: "played" });
+    expect(scheduled).toMatchObject({ id: "g2", status: "scheduled" });
   });
 });
 

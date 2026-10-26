@@ -13,6 +13,7 @@ function makeGame(overrides: Partial<Game>): Game {
     id: "g1",
     homeTeamId: "A",
     awayTeamId: "B",
+    status: "played",
     statLines: [],
     ...overrides,
   };
