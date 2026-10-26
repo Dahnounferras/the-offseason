@@ -1,31 +1,25 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import { getLeague, getTeams, getGames, addTeam, deleteTeam } from "@/lib/firestore/leagues";
-import type { League, Team, Game } from "@/types";
+import { getTeams, addTeam, deleteTeam } from "@/lib/firestore/leagues";
+import type { Team } from "@/types";
+import { useLeague } from "@/hooks/useLeague";
 import { computeStandings } from "@/lib/standings";
-import Spinner from "@/components/Spinner";
+import Button from "@/components/ui/Button";
+import Input from "@/components/ui/Input";
+import StandingsTable from "@/components/league/StandingsTable";
+import ConfirmModal from "@/components/ui/ConfirmModal";
 
 export default function TeamsPage() {
   const { id } = useParams<{ id: string }>();
-  const [league, setLeague] = useState<League | null>(null);
-  const [teams, setTeams] = useState<Team[]>([]);
-  const [games, setGames] = useState<Game[]>([]);
+  const { league, teams, games, setTeams, setGames } = useLeague();
   const [newTeamName, setNewTeamName] = useState("");
   const [addingTeam, setAddingTeam] = useState(false);
   const [confirmDeleteTeam, setConfirmDeleteTeam] = useState<Team | null>(null);
   const [deletingTeamId, setDeletingTeamId] = useState<string | null>(null);
   const [deletingModal, setDeletingModal] = useState(false);
-
-  useEffect(() => {
-    Promise.all([getLeague(id), getTeams(id), getGames(id)]).then(([l, t, g]) => {
-      if (l) setLeague(l);
-      setTeams(t);
-      setGames(g);
-    });
-  }, [id]);
 
   async function handleAddTeam() {
     if (!newTeamName.trim()) return;
@@ -46,20 +40,15 @@ export default function TeamsPage() {
     setDeletingTeamId(confirmDeleteTeam.id);
     try {
       await deleteTeam(id, confirmDeleteTeam.id);
-      setTeams((prev) => prev.filter((t) => t.id !== confirmDeleteTeam.id));
+      const teamId = confirmDeleteTeam.id;
+      setTeams((prev) => prev.filter((t) => t.id !== teamId));
+      // deleteTeam also deleted every game this team played.
+      setGames((prev) => prev.filter((g) => g.homeTeamId !== teamId && g.awayTeamId !== teamId));
       setConfirmDeleteTeam(null);
     } finally {
       setDeletingTeamId(null);
       setDeletingModal(false);
     }
-  }
-
-  if (!league) {
-    return (
-      <div className="flex items-center justify-center py-20" style={{ color: "var(--muted)" }}>
-        Loading…
-      </div>
-    );
   }
 
   const standings = computeStandings(teams, games, league.scoringRules);
@@ -91,74 +80,37 @@ export default function TeamsPage() {
             No teams yet. Add one below.
           </div>
         ) : (
-          <table className="w-full text-sm">
-            <thead>
-              <tr style={{ background: "var(--surface-2)" }}>
-                <th className="text-left px-4 py-3">#</th>
-                <th className="text-left px-4 py-3">Team</th>
-                <th className="px-4 py-3 text-center">GP</th>
-                <th className="px-4 py-3 text-center" style={{ color: "var(--win)" }}>W</th>
-                <th className="px-4 py-3 text-center" style={{ color: "var(--loss)" }}>L</th>
-                <th className="px-4 py-3 text-center" style={{ color: "var(--tie)" }}>T</th>
-                <th className="px-4 py-3 text-center font-bold" style={{ color: "var(--accent)" }}>PTS</th>
-                <th className="px-4 py-3"></th>
-                <th className="px-4 py-3"></th>
-              </tr>
-            </thead>
-            <tbody>
-              {standings.map((row, i) => {
-                const isDeleting = deletingTeamId === row.team.id;
-                return (
-                  <tr
-                    key={row.team.id}
-                    style={{ background: i % 2 === 0 ? "var(--surface)" : "var(--surface-2)", opacity: isDeleting ? 0.4 : 1 }}
-                  >
-                    <td className="px-4 py-3" style={{ color: "var(--muted)" }}>{i + 1}</td>
-                    <td className="px-4 py-3 font-medium">
-                      <Link
-                        href={`/leagues/${id}/teams/${row.team.id}`}
-                        className="hover:underline"
-                        style={{ color: "var(--foreground)" }}
-                      >
-                        {row.team.name}
-                      </Link>
-                    </td>
-                    <td className="px-4 py-3 text-center" style={{ color: "var(--muted)" }}>{row.gp}</td>
-                    <td className="px-4 py-3 text-center" style={{ color: "var(--win)" }}>{row.w}</td>
-                    <td className="px-4 py-3 text-center" style={{ color: "var(--loss)" }}>{row.l}</td>
-                    <td className="px-4 py-3 text-center" style={{ color: "var(--tie)" }}>{row.t}</td>
-                    <td className="px-4 py-3 text-center font-bold" style={{ color: "var(--accent)" }}>{row.pts}</td>
-                    <td className="px-4 py-3 text-right">
-                      <Link
-                        href={`/leagues/${id}/teams/${row.team.id}`}
-                        className="px-3 py-1.5 rounded-lg text-xs font-semibold"
-                        style={{ background: "var(--surface-2)", color: "var(--muted)", border: "1px solid var(--border)" }}
-                      >
-                        Roster & Stats ›
-                      </Link>
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      <button
-                        onClick={() => setConfirmDeleteTeam(row.team)}
-                        disabled={isDeleting}
-                        className="cursor-pointer p-1.5 rounded-lg disabled:opacity-30 hover:opacity-70 transition-opacity"
-                        style={{ color: "var(--loss)" }}
-                        title="Delete team"
-                      >
-                        <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                          <polyline points="3 6 5 6 21 6" />
-                          <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
-                          <path d="M10 11v6" />
-                          <path d="M14 11v6" />
-                          <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
-                        </svg>
-                      </button>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+          <StandingsTable
+            rows={standings}
+            leagueId={id}
+            variant="compact"
+            dimmedTeamId={deletingTeamId}
+            actions={(row) => (
+              <>
+                <Link
+                  href={`/leagues/${id}/teams/${row.team.id}`}
+                  className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-surface-2 text-muted border border-border"
+                >
+                  Roster & Stats ›
+                </Link>
+                <button
+                  onClick={() => setConfirmDeleteTeam(row.team)}
+                  disabled={deletingTeamId === row.team.id}
+                  className="cursor-pointer p-1.5 rounded-lg disabled:opacity-30 hover:opacity-70 transition-opacity text-loss"
+                  title="Delete team"
+                  aria-label={`Delete ${row.team.name}`}
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="3 6 5 6 21 6" />
+                    <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+                    <path d="M10 11v6" />
+                    <path d="M14 11v6" />
+                    <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
+                  </svg>
+                </button>
+              </>
+            )}
+          />
         )}
 
         {/* Add team form */}
@@ -167,56 +119,37 @@ export default function TeamsPage() {
             Add a team
           </p>
           <div className="flex gap-2">
-            <input
+            <Input
               type="text"
               placeholder="Team name"
               value={newTeamName}
               onChange={(e) => setNewTeamName(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && handleAddTeam()}
-              className="flex-1 px-3 py-2 rounded-lg text-sm outline-none"
-              style={{ background: "var(--surface-2)", border: "1px solid var(--border)", color: "var(--foreground)" }}
+              className="flex-1"
             />
-            <button
+            <Button
               onClick={handleAddTeam}
-              disabled={addingTeam || !newTeamName.trim()}
-              className="cursor-pointer px-4 py-2 rounded-lg text-sm font-semibold disabled:opacity-50"
-              style={{ background: "var(--accent)", color: "#000" }}
+              disabled={!newTeamName.trim()}
+              loading={addingTeam}
+              loadingText="Adding…"
             >
-              {addingTeam ? <><Spinner /> Adding…</> : "Add"}
-            </button>
+              Add
+            </Button>
           </div>
         </div>
       </div>
       {confirmDeleteTeam && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50">
-          <div
-            className="w-full max-w-sm p-6 rounded-2xl"
-            style={{ background: "var(--surface)", border: "1px solid var(--border)" }}
-          >
-            <h2 className="text-lg font-bold mb-2">Delete team?</h2>
-            <p className="text-sm mb-6" style={{ color: "var(--muted)" }}>
-              <span style={{ color: "var(--foreground)", fontWeight: 500 }}>{confirmDeleteTeam.name}</span>{" "}
-              will be permanently removed, along with its roster and every game it plays in. This cannot be undone.
-            </p>
-            <div className="flex gap-3">
-              <button
-                onClick={() => setConfirmDeleteTeam(null)}
-                className="cursor-pointer flex-1 py-2 rounded-lg text-sm"
-                style={{ background: "var(--surface-2)", color: "var(--muted)", border: "1px solid var(--border)" }}
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleDeleteTeam}
-                disabled={deletingModal}
-                className="cursor-pointer flex-1 py-2 rounded-lg text-sm font-semibold disabled:opacity-50"
-                style={{ background: "var(--loss)", color: "#fff" }}
-              >
-                {deletingModal ? <><Spinner /> Deleting…</> : "Delete"}
-              </button>
-            </div>
-          </div>
-        </div>
+        <ConfirmModal
+          title="Delete team?"
+          confirmLabel="Delete"
+          busyLabel="Deleting…"
+          busy={deletingModal}
+          onConfirm={handleDeleteTeam}
+          onCancel={() => setConfirmDeleteTeam(null)}
+        >
+          <span className="text-foreground font-medium">{confirmDeleteTeam.name}</span>{" "}
+          will be permanently removed, along with its roster and every game it plays in. This cannot be undone.
+        </ConfirmModal>
       )}
     </div>
   );

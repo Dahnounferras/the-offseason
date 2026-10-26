@@ -4,25 +4,25 @@ import { useEffect, useState, useMemo } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import {
-  getLeague,
-  getTeams,
-  getGames,
   getPlayers,
   recordResult,
   updateResult,
   saveGameStatLines,
 } from "@/lib/firestore/leagues";
-import type { League, Team, Game, Player, StatLine } from "@/types";
+import type { Game, Player } from "@/types";
+import { useLeague } from "@/hooks/useLeague";
 import { getSportConfig } from "@/lib/sportConfig";
 import Spinner from "@/components/Spinner";
-
-type DraftRow = Record<string, string>;
+import { buildStatDraft, draftToStatLines, type StatDraft } from "@/lib/stats";
+import StatGrid from "@/components/league/StatGrid";
+import { sortByJersey } from "@/lib/roster";
 
 export default function GameDetailPage() {
   const { id, gameId } = useParams<{ id: string; gameId: string }>();
-  const [league, setLeague] = useState<League | null>(null);
-  const [teams, setTeams] = useState<Team[]>([]);
-  const [game, setGame] = useState<Game | null>(null);
+  const { league, teams, games, setGames } = useLeague();
+  const game = games.find((g) => g.id === gameId) ?? null;
+  const homeTeamId = game?.homeTeamId;
+  const awayTeamId = game?.awayTeamId;
   const [homePlayers, setHomePlayers] = useState<Player[]>([]);
   const [awayPlayers, setAwayPlayers] = useState<Player[]>([]);
 
@@ -33,25 +33,21 @@ export default function GameDetailPage() {
 
   // Stats state
   const [editingStats, setEditingStats] = useState(false);
-  const [draftStats, setDraftStats] = useState<Record<string, DraftRow>>({});
+  const [draftStats, setDraftStats] = useState<StatDraft>({});
   const [savingStats, setSavingStats] = useState(false);
 
   useEffect(() => {
-    Promise.all([getLeague(id), getTeams(id), getGames(id)]).then(async ([l, t, g]) => {
-      if (l) setLeague(l);
-      setTeams(t);
-      const found = g.find((gm) => gm.id === gameId) ?? null;
-      setGame(found);
-      if (found) {
-        const [hp, ap] = await Promise.all([
-          getPlayers(id, found.homeTeamId),
-          getPlayers(id, found.awayTeamId),
-        ]);
-        setHomePlayers(hp.sort((a, b) => (a.jerseyNumber ?? 999) - (b.jerseyNumber ?? 999)));
-        setAwayPlayers(ap.sort((a, b) => (a.jerseyNumber ?? 999) - (b.jerseyNumber ?? 999)));
-      }
+    if (!homeTeamId || !awayTeamId) return;
+    Promise.all([getPlayers(id, homeTeamId), getPlayers(id, awayTeamId)]).then(([hp, ap]) => {
+      setHomePlayers(sortByJersey(hp));
+      setAwayPlayers(sortByJersey(ap));
     });
-  }, [id, gameId]);
+  }, [id, homeTeamId, awayTeamId]);
+
+  // Writes land in the shared games list so the games, stats and standings tabs see them too.
+  function patchGame(patch: Partial<Game>) {
+    setGames((prev) => prev.map((g) => (g.id === gameId ? { ...g, ...patch } : g)));
+  }
 
   const teamName = (tid: string) => teams.find((t) => t.id === tid)?.name ?? "—";
 
@@ -78,10 +74,10 @@ export default function GameDetailPage() {
     try {
       if (game.status === "played") {
         await updateResult(id, game.id, hs, as, homeSport, awaySport);
-        setGame((g) => g ? { ...g, homeScore: hs, awayScore: as, homeSportsmanship: homeSport, awaySportsmanship: awaySport } : g);
+        patchGame({ homeScore: hs, awayScore: as, homeSportsmanship: homeSport, awaySportsmanship: awaySport });
       } else {
         await recordResult(id, game.id, hs, as, homeSport, awaySport);
-        setGame((g) => g ? { ...g, status: "played", homeScore: hs, awayScore: as, homeSportsmanship: homeSport, awaySportsmanship: awaySport, playedAt: Date.now() } : g);
+        patchGame({ status: "played", homeScore: hs, awayScore: as, homeSportsmanship: homeSport, awaySportsmanship: awaySport, playedAt: Date.now() });
       }
       setEditingScore(false);
     } finally {
@@ -92,21 +88,14 @@ export default function GameDetailPage() {
   const allPlayers = useMemo(() => [...homePlayers, ...awayPlayers], [homePlayers, awayPlayers]);
 
   const sportConfig = useMemo(
-    () => getSportConfig(league?.sport ?? "Basketball"),
+    () => getSportConfig(league.sport),
     [league]
   );
   const statKeys = sportConfig.statKeys;
 
   function startEditStats() {
     if (!game) return;
-    const draft: Record<string, DraftRow> = {};
-    for (const p of allPlayers) {
-      const existing = (game.statLines ?? []).find((sl) => sl.playerId === p.id);
-      draft[p.id] = Object.fromEntries(
-        statKeys.map((k) => [k, existing ? String(existing.stats[k] ?? 0) : ""])
-      );
-    }
-    setDraftStats(draft);
+    setDraftStats(buildStatDraft(allPlayers.map((p) => p.id), game, statKeys));
     setEditingStats(true);
   }
 
@@ -114,29 +103,25 @@ export default function GameDetailPage() {
     if (!game) return;
     setSavingStats(true);
     try {
-      const statLines: StatLine[] = Object.entries(draftStats).map(([playerId, row]) => ({
-        playerId,
-        stats: Object.fromEntries(statKeys.map((k) => [k, Number(row[k]) || 0])),
-      }));
+      const statLines = draftToStatLines(draftStats, statKeys);
       await saveGameStatLines(id, game.id, statLines);
-      setGame((g) => g ? { ...g, statLines } : g);
+      patchGame({ statLines });
       setEditingStats(false);
     } finally {
       setSavingStats(false);
     }
   }
 
-  function getStatValue(playerId: string, key: string): string | number {
-    const sl = (game?.statLines ?? []).find((s) => s.playerId === playerId);
-    if (!sl) return "—";
-    return sl.stats[key] ?? 0;
-  }
-
   const isPlayed = game?.status === "played";
-  const leagueEnded = league?.status === "ended";
+  const leagueEnded = league.status === "ended";
 
-  if (!league || !game) {
-    return <div className="py-20 text-center" style={{ color: "var(--muted)" }}>Loading…</div>;
+  if (!game) {
+    return (
+      <div className="py-20 text-center text-muted">
+        This game no longer exists.{" "}
+        <Link href={`/leagues/${id}/games`} className="underline">Back to games</Link>
+      </div>
+    );
   }
 
   const gameLabel = game.gameNumber ? `Game ${game.gameNumber}` : "Game";
@@ -332,71 +317,17 @@ export default function GameDetailPage() {
                 No players on this roster.
               </div>
             ) : (
-              <table className="w-full text-sm">
-                <thead>
-                  <tr style={{ background: "var(--surface-2)" }}>
-                    <th className="text-left px-3 py-2 text-xs" style={{ color: "var(--muted)" }}>#</th>
-                    <th className="text-left px-3 py-2 text-xs">Player</th>
-                    {statKeys.map((k) => (
-                      <th
-                        key={k}
-                        className="px-3 py-2 text-center text-xs"
-                        style={{
-                          color: k === sportConfig.primaryStat ? "var(--accent)" : "var(--muted)",
-                          fontWeight: k === sportConfig.primaryStat ? 700 : 400,
-                        }}
-                      >
-                        {sportConfig.statLabels[k]?.abbrev ?? k.toUpperCase()}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {players.map((player, i) => (
-                    <tr
-                      key={player.id}
-                      style={{ background: i % 2 === 0 ? "var(--surface)" : "var(--surface-2)" }}
-                    >
-                      <td className="px-3 py-2.5 font-mono text-xs" style={{ color: "var(--accent)" }}>
-                        {player.jerseyNumber !== undefined ? `#${player.jerseyNumber}` : ""}
-                      </td>
-                      <td className="px-3 py-2.5 font-medium text-xs">
-                        {player.firstName} {player.lastName}
-                      </td>
-                      {editingStats
-                        ? statKeys.map((k) => (
-                            <td key={k} className="px-1 py-2 text-center">
-                              <input
-                                type="number" min={0} placeholder="0"
-                                value={draftStats[player.id]?.[k] ?? ""}
-                                onChange={(e) =>
-                                  setDraftStats((prev) => ({
-                                    ...prev,
-                                    [player.id]: { ...prev[player.id], [k]: e.target.value },
-                                  }))
-                                }
-                                className="w-12 px-1 py-1 rounded text-xs text-center outline-none"
-                                style={{ background: "var(--surface-2)", border: "1px solid var(--border)", color: "var(--foreground)" }}
-                              />
-                            </td>
-                          ))
-                        : statKeys.map((k) => (
-                            <td
-                              key={k}
-                              className="px-3 py-2.5 text-center text-xs"
-                              style={{
-                                color: k === sportConfig.primaryStat ? "var(--accent)" : "var(--muted)",
-                                fontWeight: k === sportConfig.primaryStat ? 600 : 400,
-                              }}
-                            >
-                              {getStatValue(player.id, k)}
-                            </td>
-                          ))
-                      }
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              <StatGrid
+                rows={players.map((player) => ({ player }))}
+                game={game}
+                sportConfig={sportConfig}
+                editing={editingStats}
+                draft={draftStats}
+                onDraftChange={(playerId, k, value) =>
+                  setDraftStats((prev) => ({ ...prev, [playerId]: { ...prev[playerId], [k]: value } }))
+                }
+                dense
+              />
             )}
           </div>
         ))}

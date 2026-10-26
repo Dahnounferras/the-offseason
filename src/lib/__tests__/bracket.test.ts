@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { computeSeedings, generateBracket, cascadeClear } from "@/lib/bracket";
+import { computeSeedings, generateBracket, cascadeClear, advanceWinner, clearResults } from "@/lib/bracket";
 import type { Team, Game, League, BracketMatchup } from "@/types";
 
 const rules: League["scoringRules"] = { win: 2, tie: 1, loss: 0 };
@@ -197,5 +197,64 @@ describe("cascadeClear", () => {
   it("returns without error when roundIdx is out of bounds", () => {
     const rounds = makeRounds();
     expect(() => cascadeClear(rounds, 99, 0)).not.toThrow();
+  });
+});
+
+describe("advanceWinner", () => {
+  // 4-team bracket: A v D, B v C, then the final.
+  function fourTeam(): BracketMatchup[][] {
+    return generateBracket(["A", "B", "C", "D"].map(makeTeam));
+  }
+
+  it("records the winner and moves them into the next round's matching slot", () => {
+    const afterTop = advanceWinner(fourTeam(), 0, 0, "A")!;
+    expect(afterTop[0][0].winnerId).toBe("A");
+    expect(afterTop[1][0].homeTeamId).toBe("A");
+    const afterBottom = advanceWinner(afterTop, 0, 1, "C")!;
+    expect(afterBottom[1][0].awayTeamId).toBe("C");
+  });
+
+  it("does not mutate the input rounds", () => {
+    const rounds = fourTeam();
+    advanceWinner(rounds, 0, 0, "A");
+    expect(rounds[0][0].winnerId).toBeNull();
+    expect(rounds[1][0].homeTeamId).toBeNull();
+  });
+
+  it("returns null when the team already won that matchup", () => {
+    const rounds = advanceWinner(fourTeam(), 0, 0, "A")!;
+    expect(advanceWinner(rounds, 0, 0, "A")).toBeNull();
+  });
+
+  it("changing an earlier result clears the later result that depended on it", () => {
+    let rounds = advanceWinner(fourTeam(), 0, 0, "A")!;
+    rounds = advanceWinner(rounds, 0, 1, "B")!;
+    rounds = advanceWinner(rounds, 1, 0, "A")!;
+    rounds = advanceWinner(rounds, 0, 0, "D")!;
+    expect(rounds[1][0].homeTeamId).toBe("D");
+    expect(rounds[1][0].winnerId).toBeNull();
+  });
+
+  it("sets the champion when the final is decided", () => {
+    let rounds = advanceWinner(fourTeam(), 0, 0, "A")!;
+    rounds = advanceWinner(rounds, 0, 1, "B")!;
+    rounds = advanceWinner(rounds, 1, 0, "B")!;
+    expect(rounds[1][0].winnerId).toBe("B");
+  });
+});
+
+describe("clearResults", () => {
+  it("keeps first-round teams and clears every winner and later slot", () => {
+    let rounds = generateBracket(["A", "B", "C", "D"].map(makeTeam));
+    rounds = advanceWinner(rounds, 0, 0, "A")!;
+    rounds = advanceWinner(rounds, 0, 1, "B")!;
+    rounds = advanceWinner(rounds, 1, 0, "A")!;
+    const cleared = clearResults(rounds);
+    expect(cleared[0]).toEqual([
+      { homeTeamId: "A", awayTeamId: "D", winnerId: null },
+      { homeTeamId: "B", awayTeamId: "C", winnerId: null },
+    ]);
+    expect(cleared[1]).toEqual([{ homeTeamId: null, awayTeamId: null, winnerId: null }]);
+    expect(rounds[1][0].winnerId).toBe("A");
   });
 });

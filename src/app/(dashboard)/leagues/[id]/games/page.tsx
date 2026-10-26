@@ -1,28 +1,14 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import { getLeague, getTeams, getGames } from "@/lib/firestore/leagues";
-import type { League, Team, Game } from "@/types";
+import { useLeague } from "@/hooks/useLeague";
 
 export default function GamesPage() {
   const { id } = useParams<{ id: string }>();
-  const [league, setLeague] = useState<League | null>(null);
-  const [teams, setTeams] = useState<Team[]>([]);
-  const [games, setGames] = useState<Game[]>([]);
-
-  useEffect(() => {
-    Promise.all([getLeague(id), getTeams(id), getGames(id)]).then(([l, t, g]) => {
-      if (l) setLeague(l);
-      setTeams(t);
-      setGames(g.sort((a, b) => (a.gameNumber ?? 0) - (b.gameNumber ?? 0)));
-    });
-  }, [id]);
+  const { league, teams, games } = useLeague();
 
   const teamName = (tid: string) => teams.find((t) => t.id === tid)?.name ?? tid;
-
-  if (!league) return <div className="py-20 text-center" style={{ color: "var(--muted)" }}>Loading…</div>;
 
   const scheduled = games.filter((g) => g.status === "scheduled");
   const played = games.filter((g) => g.status === "played").sort((a, b) => (b.gameNumber ?? 0) - (a.gameNumber ?? 0));

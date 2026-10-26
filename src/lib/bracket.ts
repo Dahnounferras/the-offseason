@@ -38,6 +38,34 @@ export function generateBracket(seededTeams: Team[]): BracketMatchup[][] {
   return rounds;
 }
 
+// Returns new rounds with winnerId advanced into the next round, clearing any
+// later results that depended on the old winner; null when nothing changes.
+export function advanceWinner(
+  rounds: BracketMatchup[][],
+  roundIdx: number,
+  matchIdx: number,
+  winnerId: string
+): BracketMatchup[][] | null {
+  if (rounds[roundIdx][matchIdx].winnerId === winnerId) return null;
+  const updated = rounds.map((round) => round.map((m) => ({ ...m })));
+  updated[roundIdx][matchIdx].winnerId = winnerId;
+  if (roundIdx + 1 < updated.length) {
+    const nextMatchIdx = Math.floor(matchIdx / 2);
+    const nextMatch = updated[roundIdx + 1][nextMatchIdx];
+    if (matchIdx % 2 === 0) nextMatch.homeTeamId = winnerId;
+    else nextMatch.awayTeamId = winnerId;
+    if (nextMatch.winnerId) cascadeClear(updated, roundIdx + 1, nextMatchIdx);
+  }
+  return updated;
+}
+
+// Clears every result and every team past the first round.
+export function clearResults(rounds: BracketMatchup[][]): BracketMatchup[][] {
+  return rounds.map((round, r) =>
+    round.map((m) => (r === 0 ? { ...m, winnerId: null } : { homeTeamId: null, awayTeamId: null, winnerId: null }))
+  );
+}
+
 export function cascadeClear(
   rounds: BracketMatchup[][],
   roundIdx: number,

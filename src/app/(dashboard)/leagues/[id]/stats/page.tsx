@@ -3,40 +3,31 @@
 import { useEffect, useState, useMemo } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import {
-  getLeague,
-  getTeams,
-  getGames,
-  getPlayers,
-  saveGameStatLines,
-} from "@/lib/firestore/leagues";
-import type { League, Team, Game, Player, StatLine } from "@/types";
+import { getPlayers, saveGameStatLines } from "@/lib/firestore/leagues";
+import type { Game, Player } from "@/types";
+import { useLeague } from "@/hooks/useLeague";
 import { getSportConfig } from "@/lib/sportConfig";
 import Spinner from "@/components/Spinner";
+import { computeSeasonTotals, buildStatDraft, draftToStatLines, type StatDraft } from "@/lib/stats";
+import StatGrid from "@/components/league/StatGrid";
+import SeasonStatsTable from "@/components/league/SeasonStatsTable";
 
 type PlayerInfo = { player: Player; teamName: string };
-type DraftRow = Record<string, string>;
 
 export default function StatsPage() {
   const { id } = useParams<{ id: string }>();
-  const [league, setLeague] = useState<League | null>(null);
-  const [teams, setTeams] = useState<Team[]>([]);
-  const [games, setGames] = useState<Game[]>([]);
+  const { league, teams, games, setGames } = useLeague();
   const [playerMap, setPlayerMap] = useState<Map<string, PlayerInfo>>(new Map());
   const [activeTab, setActiveTab] = useState<"season" | "game">("season");
   const [selectedGameId, setSelectedGameId] = useState<string | null>(null);
   const [editingStats, setEditingStats] = useState(false);
-  const [draftStats, setDraftStats] = useState<Record<string, DraftRow>>({});
+  const [draftStats, setDraftStats] = useState<StatDraft>({});
   const [savingStats, setSavingStats] = useState(false);
 
   useEffect(() => {
-    Promise.all([getLeague(id), getTeams(id), getGames(id)]).then(async ([l, t, g]) => {
-      if (l) setLeague(l);
-      setTeams(t);
-      setGames(g.sort((a, b) => (a.gameNumber ?? 0) - (b.gameNumber ?? 0)));
-      const allPlayers = await Promise.all(
-        t.map((team) => getPlayers(id, team.id).then((ps) => ({ team, players: ps })))
-      );
+    Promise.all(
+      teams.map((team) => getPlayers(id, team.id).then((ps) => ({ team, players: ps })))
+    ).then((allPlayers) => {
       const map = new Map<string, PlayerInfo>();
       for (const { team, players } of allPlayers) {
         for (const player of players) {
@@ -45,11 +36,11 @@ export default function StatsPage() {
       }
       setPlayerMap(map);
     });
-  }, [id]);
+  }, [id, teams]);
 
   const sportConfig = useMemo(
-    () => getSportConfig(league?.sport ?? "Basketball"),
-    [league]
+    () => getSportConfig(league.sport),
+    [league.sport]
   );
   const statKeys = sportConfig.statKeys;
 
@@ -65,22 +56,7 @@ export default function StatsPage() {
 
   const teamName = (tid: string) => teams.find((t) => t.id === tid)?.name ?? tid;
 
-  const seasonTotals = useMemo(() => {
-    type TotalsEntry = { [key: string]: number; gp: number };
-    const totals: Record<string, TotalsEntry> = {};
-    for (const game of playedGames) {
-      for (const sl of game.statLines ?? []) {
-        if (!totals[sl.playerId]) {
-          totals[sl.playerId] = { gp: 0, ...Object.fromEntries(statKeys.map((k) => [k, 0])) };
-        }
-        for (const k of statKeys) {
-          totals[sl.playerId][k] = (totals[sl.playerId][k] ?? 0) + (sl.stats[k] ?? 0);
-        }
-        totals[sl.playerId].gp += 1;
-      }
-    }
-    return totals;
-  }, [playedGames, statKeys]);
+  const seasonTotals = useMemo(() => computeSeasonTotals(games, statKeys), [games, statKeys]);
 
   const gamePlayers = useMemo(() => {
     if (!selectedGame) return [] as { playerId: string; info: PlayerInfo }[];
@@ -100,14 +76,7 @@ export default function StatsPage() {
   }, [selectedGame, playerMap]);
 
   function startEditStats(game: Game) {
-    const draft: Record<string, DraftRow> = {};
-    for (const { playerId } of gamePlayers) {
-      const existing = (game.statLines ?? []).find((sl) => sl.playerId === playerId);
-      draft[playerId] = Object.fromEntries(
-        statKeys.map((k) => [k, existing ? String(existing.stats[k] ?? 0) : ""])
-      );
-    }
-    setDraftStats(draft);
+    setDraftStats(buildStatDraft(gamePlayers.map((r) => r.playerId), game, statKeys));
     setEditingStats(true);
   }
 
@@ -115,10 +84,7 @@ export default function StatsPage() {
     if (!selectedGame) return;
     setSavingStats(true);
     try {
-      const statLines: StatLine[] = Object.entries(draftStats).map(([playerId, row]) => ({
-        playerId,
-        stats: Object.fromEntries(statKeys.map((k) => [k, Number(row[k]) || 0])),
-      }));
+      const statLines = draftToStatLines(draftStats, statKeys);
       await saveGameStatLines(id, selectedGame.id, statLines);
       setGames((prev) =>
         prev.map((g) => (g.id === selectedGame.id ? { ...g, statLines } : g))
@@ -129,21 +95,7 @@ export default function StatsPage() {
     }
   }
 
-  const seasonRows = [...playerMap.entries()]
-    .map(([pid, info]) => ({
-      pid,
-      info,
-      totals: seasonTotals[pid] ?? { gp: 0, ...Object.fromEntries(statKeys.map((k) => [k, 0])) },
-    }))
-    .sort((a, b) => (b.totals[sportConfig.primaryStat] ?? 0) - (a.totals[sportConfig.primaryStat] ?? 0));
-
-  if (!league) {
-    return (
-      <div className="py-20 text-center" style={{ color: "var(--muted)" }}>
-        Loading…
-      </div>
-    );
-  }
+  const seasonRows = [...playerMap.values()];
 
   return (
     <div>
@@ -202,88 +154,12 @@ export default function StatsPage() {
           className="rounded-xl overflow-hidden"
           style={{ border: "1px solid var(--border)" }}
         >
-          <table className="w-full text-sm">
-            <thead>
-              <tr style={{ background: "var(--surface-2)" }}>
-                <th className="text-left px-4 py-3">Player</th>
-                <th className="text-left px-4 py-3">Team</th>
-                <th className="px-4 py-3 text-center" style={{ color: "var(--muted)" }}>GP</th>
-                {statKeys.map((k) => (
-                  <th
-                    key={k}
-                    className="px-4 py-3 text-center"
-                    style={{
-                      color: k === sportConfig.primaryStat ? "var(--accent)" : "var(--muted)",
-                      fontWeight: k === sportConfig.primaryStat ? 700 : 400,
-                    }}
-                  >
-                    {sportConfig.statLabels[k]?.abbrev ?? k.toUpperCase()}
-                  </th>
-                ))}
-                <th className="px-4 py-3 text-center" style={{ color: "var(--muted)" }}>
-                  {sportConfig.computedStatLabel}
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {seasonRows.length === 0 ? (
-                <tr>
-                  <td
-                    colSpan={statKeys.length + 4}
-                    className="text-center py-10"
-                    style={{ color: "var(--muted)" }}
-                  >
-                    No players yet. Add players to teams from the league page.
-                  </td>
-                </tr>
-              ) : (
-                seasonRows.map(({ pid, info, totals }, i) => (
-                  <tr
-                    key={pid}
-                    style={{
-                      background:
-                        i % 2 === 0 ? "var(--surface)" : "var(--surface-2)",
-                    }}
-                  >
-                    <td className="px-4 py-3 font-medium">
-                      {info.player.jerseyNumber !== undefined && (
-                        <span
-                          className="font-mono text-xs mr-2"
-                          style={{ color: "var(--accent)" }}
-                        >
-                          #{info.player.jerseyNumber}
-                        </span>
-                      )}
-                      {info.player.firstName} {info.player.lastName}
-                    </td>
-                    <td className="px-4 py-3" style={{ color: "var(--muted)" }}>
-                      {info.teamName}
-                    </td>
-                    <td className="px-4 py-3 text-center" style={{ color: "var(--muted)" }}>
-                      {totals.gp}
-                    </td>
-                    {statKeys.map((k) => (
-                      <td
-                        key={k}
-                        className="px-4 py-3 text-center"
-                        style={{
-                          color: k === sportConfig.primaryStat ? "var(--accent)" : "var(--muted)",
-                          fontWeight: k === sportConfig.primaryStat ? 600 : 400,
-                        }}
-                      >
-                        {totals[k] ?? 0}
-                      </td>
-                    ))}
-                    <td className="px-4 py-3 text-center" style={{ color: "var(--muted)" }}>
-                      {totals.gp > 0
-                        ? ((totals[sportConfig.primaryStat] ?? 0) / totals.gp).toFixed(1)
-                        : "—"}
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+          <SeasonStatsTable
+            rows={seasonRows}
+            totals={seasonTotals}
+            sportConfig={sportConfig}
+            emptyMessage="No players yet. Add players to teams from the league page."
+          />
         </div>
       )}
 
@@ -401,130 +277,16 @@ export default function StatsPage() {
                     )}
                   </div>
 
-                  {/* Stats table */}
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr style={{ background: "var(--surface-2)" }}>
-                        <th
-                          className="text-left px-4 py-2 font-medium"
-                          style={{ color: "var(--muted)" }}
-                        >
-                          Player
-                        </th>
-                        <th
-                          className="text-left px-4 py-2 font-medium"
-                          style={{ color: "var(--muted)" }}
-                        >
-                          Team
-                        </th>
-                        {statKeys.map((k) => (
-                          <th
-                            key={k}
-                            className="px-4 py-2 text-center"
-                            style={{
-                              color: k === sportConfig.primaryStat ? "var(--accent)" : "var(--muted)",
-                              fontWeight: k === sportConfig.primaryStat ? 700 : 400,
-                            }}
-                          >
-                            {sportConfig.statLabels[k]?.abbrev ?? k.toUpperCase()}
-                          </th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {gamePlayers.length === 0 ? (
-                        <tr>
-                          <td
-                            colSpan={statKeys.length + 2}
-                            className="text-center py-8"
-                            style={{ color: "var(--muted)" }}
-                          >
-                            No players found for these teams.
-                          </td>
-                        </tr>
-                      ) : (
-                        gamePlayers.map(({ playerId, info }, i) => {
-                          const existingSl = (
-                            selectedGame.statLines ?? []
-                          ).find((sl) => sl.playerId === playerId);
-                          return (
-                            <tr
-                              key={playerId}
-                              style={{
-                                background:
-                                  i % 2 === 0
-                                    ? "var(--surface)"
-                                    : "var(--surface-2)",
-                              }}
-                            >
-                              <td className="px-4 py-2.5 font-medium">
-                                {info.player.jerseyNumber !== undefined && (
-                                  <span
-                                    className="font-mono text-xs mr-2"
-                                    style={{ color: "var(--accent)" }}
-                                  >
-                                    #{info.player.jerseyNumber}
-                                  </span>
-                                )}
-                                {info.player.firstName} {info.player.lastName}
-                              </td>
-                              <td
-                                className="px-4 py-2.5"
-                                style={{ color: "var(--muted)" }}
-                              >
-                                {info.teamName}
-                              </td>
-                              {editingStats
-                                ? statKeys.map((k) => (
-                                    <td
-                                      key={k}
-                                      className="px-2 py-2 text-center"
-                                    >
-                                      <input
-                                        type="number"
-                                        min={0}
-                                        placeholder="0"
-                                        value={draftStats[playerId]?.[k] ?? ""}
-                                        onChange={(e) =>
-                                          setDraftStats((prev) => ({
-                                            ...prev,
-                                            [playerId]: {
-                                              ...prev[playerId],
-                                              [k]: e.target.value,
-                                            },
-                                          }))
-                                        }
-                                        className="w-14 px-1 py-1 rounded text-sm text-center outline-none"
-                                        style={{
-                                          background: "var(--surface-2)",
-                                          border: "1px solid var(--border)",
-                                          color: "var(--foreground)",
-                                        }}
-                                      />
-                                    </td>
-                                  ))
-                                : statKeys.map((k) => (
-                                    <td
-                                      key={k}
-                                      className="px-4 py-2.5 text-center"
-                                      style={{
-                                        color: k === sportConfig.primaryStat
-                                          ? "var(--accent)"
-                                          : "var(--muted)",
-                                        fontWeight: k === sportConfig.primaryStat ? 600 : 400,
-                                      }}
-                                    >
-                                      {existingSl
-                                        ? (existingSl.stats[k] ?? 0)
-                                        : "—"}
-                                    </td>
-                                  ))}
-                            </tr>
-                          );
-                        })
-                      )}
-                    </tbody>
-                  </table>
+                  <StatGrid
+                    rows={gamePlayers.map(({ info }) => info)}
+                    game={selectedGame}
+                    sportConfig={sportConfig}
+                    editing={editingStats}
+                    draft={draftStats}
+                    onDraftChange={(playerId, k, value) =>
+                      setDraftStats((prev) => ({ ...prev, [playerId]: { ...prev[playerId], [k]: value } }))
+                    }
+                  />
                 </div>
               )}
             </>
