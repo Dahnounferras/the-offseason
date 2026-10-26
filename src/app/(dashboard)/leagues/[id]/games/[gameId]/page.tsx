@@ -4,15 +4,13 @@ import { useEffect, useState, useMemo } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import {
-  getLeague,
-  getTeams,
-  getGames,
   getPlayers,
   recordResult,
   updateResult,
   saveGameStatLines,
 } from "@/lib/firestore/leagues";
-import type { League, Team, Game, Player } from "@/types";
+import type { Game, Player } from "@/types";
+import { useLeague } from "@/hooks/useLeague";
 import { getSportConfig } from "@/lib/sportConfig";
 import Spinner from "@/components/Spinner";
 import { buildStatDraft, draftToStatLines, type StatDraft } from "@/lib/stats";
@@ -21,9 +19,10 @@ import { sortByJersey } from "@/lib/roster";
 
 export default function GameDetailPage() {
   const { id, gameId } = useParams<{ id: string; gameId: string }>();
-  const [league, setLeague] = useState<League | null>(null);
-  const [teams, setTeams] = useState<Team[]>([]);
-  const [game, setGame] = useState<Game | null>(null);
+  const { league, teams, games, setGames } = useLeague();
+  const game = games.find((g) => g.id === gameId) ?? null;
+  const homeTeamId = game?.homeTeamId;
+  const awayTeamId = game?.awayTeamId;
   const [homePlayers, setHomePlayers] = useState<Player[]>([]);
   const [awayPlayers, setAwayPlayers] = useState<Player[]>([]);
 
@@ -38,21 +37,17 @@ export default function GameDetailPage() {
   const [savingStats, setSavingStats] = useState(false);
 
   useEffect(() => {
-    Promise.all([getLeague(id), getTeams(id), getGames(id)]).then(async ([l, t, g]) => {
-      if (l) setLeague(l);
-      setTeams(t);
-      const found = g.find((gm) => gm.id === gameId) ?? null;
-      setGame(found);
-      if (found) {
-        const [hp, ap] = await Promise.all([
-          getPlayers(id, found.homeTeamId),
-          getPlayers(id, found.awayTeamId),
-        ]);
-        setHomePlayers(sortByJersey(hp));
-        setAwayPlayers(sortByJersey(ap));
-      }
+    if (!homeTeamId || !awayTeamId) return;
+    Promise.all([getPlayers(id, homeTeamId), getPlayers(id, awayTeamId)]).then(([hp, ap]) => {
+      setHomePlayers(sortByJersey(hp));
+      setAwayPlayers(sortByJersey(ap));
     });
-  }, [id, gameId]);
+  }, [id, homeTeamId, awayTeamId]);
+
+  // Writes land in the shared games list so the games, stats and standings tabs see them too.
+  function patchGame(patch: Partial<Game>) {
+    setGames((prev) => prev.map((g) => (g.id === gameId ? { ...g, ...patch } : g)));
+  }
 
   const teamName = (tid: string) => teams.find((t) => t.id === tid)?.name ?? "—";
 
@@ -79,10 +74,10 @@ export default function GameDetailPage() {
     try {
       if (game.status === "played") {
         await updateResult(id, game.id, hs, as, homeSport, awaySport);
-        setGame((g) => g ? { ...g, homeScore: hs, awayScore: as, homeSportsmanship: homeSport, awaySportsmanship: awaySport } : g);
+        patchGame({ homeScore: hs, awayScore: as, homeSportsmanship: homeSport, awaySportsmanship: awaySport });
       } else {
         await recordResult(id, game.id, hs, as, homeSport, awaySport);
-        setGame((g) => g ? { ...g, status: "played", homeScore: hs, awayScore: as, homeSportsmanship: homeSport, awaySportsmanship: awaySport, playedAt: Date.now() } : g);
+        patchGame({ status: "played", homeScore: hs, awayScore: as, homeSportsmanship: homeSport, awaySportsmanship: awaySport, playedAt: Date.now() });
       }
       setEditingScore(false);
     } finally {
@@ -93,7 +88,7 @@ export default function GameDetailPage() {
   const allPlayers = useMemo(() => [...homePlayers, ...awayPlayers], [homePlayers, awayPlayers]);
 
   const sportConfig = useMemo(
-    () => getSportConfig(league?.sport ?? "Basketball"),
+    () => getSportConfig(league.sport),
     [league]
   );
   const statKeys = sportConfig.statKeys;
@@ -110,7 +105,7 @@ export default function GameDetailPage() {
     try {
       const statLines = draftToStatLines(draftStats, statKeys);
       await saveGameStatLines(id, game.id, statLines);
-      setGame((g) => g ? { ...g, statLines } : g);
+      patchGame({ statLines });
       setEditingStats(false);
     } finally {
       setSavingStats(false);
@@ -118,10 +113,15 @@ export default function GameDetailPage() {
   }
 
   const isPlayed = game?.status === "played";
-  const leagueEnded = league?.status === "ended";
+  const leagueEnded = league.status === "ended";
 
-  if (!league || !game) {
-    return <div className="py-20 text-center" style={{ color: "var(--muted)" }}>Loading…</div>;
+  if (!game) {
+    return (
+      <div className="py-20 text-center text-muted">
+        This game no longer exists.{" "}
+        <Link href={`/leagues/${id}/games`} className="underline">Back to games</Link>
+      </div>
+    );
   }
 
   const gameLabel = game.gameNumber ? `Game ${game.gameNumber}` : "Game";

@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { getLeague, getTeams, getGames, addTeam, getBracket, scheduleGames, endLeague, deleteLeague, reactivateLeague, resetLeague } from "@/lib/firestore/leagues";
-import type { League, Team, Game, Bracket } from "@/types";
+import { getTeams, getGames, addTeam, scheduleGames, endLeague, deleteLeague, reactivateLeague, resetLeague } from "@/lib/firestore/leagues";
+import type { Team } from "@/types";
+import { useLeague } from "@/hooks/useLeague";
 import { generateSchedule } from "@/lib/schedule";
 import { computeStandings } from "@/lib/standings";
 import Spinner from "@/components/Spinner";
@@ -20,10 +21,7 @@ import RosterEditor from "@/components/league/RosterEditor";
 export default function LeaguePage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
-  const [league, setLeague] = useState<League | null>(null);
-  const [teams, setTeams] = useState<Team[]>([]);
-  const [games, setGames] = useState<Game[]>([]);
-  const [bracket, setBracket] = useState<Bracket | null>(null);
+  const { league, teams, games, bracket, setLeague, setTeams, setGames, setBracket } = useLeague();
   const [newTeamName, setNewTeamName] = useState("");
   const [addingTeam, setAddingTeam] = useState(false);
   const [rosterTeam, setRosterTeam] = useState<Team | null>(null);
@@ -34,70 +32,72 @@ export default function LeaguePage() {
   const [showResetModal, setShowResetModal] = useState(false);
   const [actioning, setActioning] = useState(false);
 
-  useEffect(() => {
-    Promise.all([getLeague(id), getTeams(id), getGames(id), getBracket(id)]).then(([l, t, g, b]) => {
-      if (l) setLeague(l);
-      setTeams(t);
-      setGames(g);
-      setBracket(b);
-    });
-  }, [id]);
-
   async function handleAddTeam() {
     if (!newTeamName.trim()) return;
     setAddingTeam(true);
-    await addTeam(id, newTeamName.trim());
-    const updated = await getTeams(id);
-    setTeams(updated);
-    setNewTeamName("");
-    setAddingTeam(false);
+    try {
+      await addTeam(id, newTeamName.trim());
+      setTeams(await getTeams(id));
+      setNewTeamName("");
+    } finally {
+      setAddingTeam(false);
+    }
   }
 
   async function handleStartLeague() {
-    if (!league || teams.length < 2) return;
+    if (teams.length < 2) return;
     setStarting(true);
     try {
       const matchups = generateSchedule(teams.map((t) => t.id), league.season.totalGames);
       await scheduleGames(id, matchups.map((m, i) => ({ ...m, gameNumber: i + 1 })));
-      const updated = await getGames(id);
-      setGames(updated);
+      setGames(await getGames(id));
     } finally {
       setStarting(false);
     }
   }
 
+  // On success the page navigates away; finally only matters when the write fails.
   async function handleEndSeason() {
     setActioning(true);
-    await endLeague(id);
-    router.push("/dashboard");
+    try {
+      await endLeague(id);
+      router.push("/dashboard");
+    } finally {
+      setActioning(false);
+    }
   }
 
   async function handleDeleteLeague() {
     setActioning(true);
-    await deleteLeague(id);
-    router.push("/dashboard");
+    try {
+      await deleteLeague(id);
+      router.push("/dashboard");
+    } finally {
+      setActioning(false);
+    }
   }
 
   async function handleReset() {
     setActioning(true);
-    await resetLeague(id);
-    const updated = await getGames(id);
-    setGames(updated);
-    setBracket(null);
-    setActioning(false);
-    setShowResetModal(false);
+    try {
+      await resetLeague(id);
+      setGames([]);
+      setBracket(null);
+      setShowResetModal(false);
+    } finally {
+      setActioning(false);
+    }
   }
 
   async function handleReactivate() {
     setActioning(true);
-    await reactivateLeague(id);
-    setLeague((l) => l ? { ...l, status: "active" } : l);
-    setActioning(false);
-    setShowReactivateModal(false);
-  }
-
-  if (!league) {
-    return <div className="flex items-center justify-center py-20" style={{ color: "var(--muted)" }}>Loading…</div>;
+    try {
+      await reactivateLeague(id);
+      setLeague((l) => ({ ...l, status: "active" }));
+      setShowReactivateModal(false);
+    } finally {
+      setActioning(false);
+    }
   }
 
   const standings = computeStandings(teams, games, league.scoringRules);

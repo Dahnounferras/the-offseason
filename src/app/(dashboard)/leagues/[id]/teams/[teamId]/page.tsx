@@ -3,8 +3,9 @@
 import { useEffect, useState, useMemo } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import { getLeague, getTeams, getGames, getPlayers } from "@/lib/firestore/leagues";
-import type { League, Team, Game, Player } from "@/types";
+import { getPlayers } from "@/lib/firestore/leagues";
+import type { Player } from "@/types";
+import { useLeague } from "@/hooks/useLeague";
 import { computeStandings } from "@/lib/standings";
 import { getSportConfig } from "@/lib/sportConfig";
 import ConfirmModal from "@/components/ui/ConfirmModal";
@@ -15,22 +16,13 @@ import { useRoster } from "@/hooks/useRoster";
 
 export default function TeamDetailPage() {
   const { id, teamId } = useParams<{ id: string; teamId: string }>();
-  const [league, setLeague] = useState<League | null>(null);
-  const [teams, setTeams] = useState<Team[]>([]);
-  const [games, setGames] = useState<Game[]>([]);
+  const { league, teams, games } = useLeague();
   const [players, setPlayers] = useState<Player[]>([]);
   const [confirmDeletePlayer, setConfirmDeletePlayer] = useState<Player | null>(null);
   const roster = useRoster(id, teamId, players, setPlayers);
 
   useEffect(() => {
-    Promise.all([getLeague(id), getTeams(id), getGames(id), getPlayers(id, teamId)]).then(
-      ([l, t, g, p]) => {
-        if (l) setLeague(l);
-        setTeams(t);
-        setGames(g);
-        setPlayers(p);
-      }
-    );
+    getPlayers(id, teamId).then(setPlayers);
   }, [id, teamId]);
 
   async function handleDeletePlayer() {
@@ -42,14 +34,14 @@ export default function TeamDetailPage() {
   const team = teams.find((t) => t.id === teamId) ?? null;
 
   const sportConfig = useMemo(
-    () => getSportConfig(league?.sport ?? "Basketball"),
-    [league]
+    () => getSportConfig(league.sport),
+    [league.sport]
   );
   const statKeys = sportConfig.statKeys;
 
   const standings = useMemo(
-    () => (league ? computeStandings(teams, games, league.scoringRules) : []),
-    [teams, games, league]
+    () => computeStandings(teams, games, league.scoringRules),
+    [teams, games, league.scoringRules]
   );
 
   const teamStanding = standings.find((row) => row.team.id === teamId);
@@ -63,10 +55,11 @@ export default function TeamDetailPage() {
     return (bStats?.[sportConfig.primaryStat] ?? 0) - (aStats?.[sportConfig.primaryStat] ?? 0);
   });
 
-  if (!league) {
+  if (!team) {
     return (
-      <div className="flex items-center justify-center py-20" style={{ color: "var(--muted)" }}>
-        Loading…
+      <div className="py-20 text-center text-muted">
+        This team no longer exists.{" "}
+        <Link href={`/leagues/${id}/teams`} className="underline">Back to teams</Link>
       </div>
     );
   }
@@ -80,11 +73,11 @@ export default function TeamDetailPage() {
           <Link href={`/leagues/${id}`} className="hover:underline">{league.name}</Link>
           {" / "}
           <Link href={`/leagues/${id}/teams`} className="hover:underline">Teams</Link>
-          {team ? ` / ${team.name}` : ""}
+          {` / ${team.name}`}
         </div>
         <div className="flex items-start justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold">{team?.name ?? "Team"}</h1>
+            <h1 className="text-2xl font-bold">{team.name}</h1>
             {teamStanding && (
               <div className="flex items-center gap-3 mt-1 text-sm" style={{ color: "var(--muted)" }}>
                 <span style={{ color: "var(--win)" }}>{teamStanding.w}W</span>

@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import { getLeague, getTeams, getGames, getBracket, saveBracket, deleteBracket, updateBracket } from "@/lib/firestore/leagues";
-import type { League, Team, Game, Bracket } from "@/types";
+import { saveBracket, deleteBracket, updateBracket } from "@/lib/firestore/leagues";
+import type { Bracket } from "@/types";
+import { useLeague } from "@/hooks/useLeague";
 import { computeSeedings, generateBracket, advanceWinner, clearResults } from "@/lib/bracket";
 import { championId, countRemaining } from "@/lib/bracketLayout";
 import Spinner from "@/components/Spinner";
@@ -13,52 +14,41 @@ import BracketView from "@/components/league/BracketView";
 
 export default function BracketPage() {
   const { id } = useParams<{ id: string }>();
-  const [league, setLeague] = useState<League | null>(null);
-  const [teams, setTeams] = useState<Team[]>([]);
-  const [games, setGames] = useState<Game[]>([]);
-  const [bracket, setBracket] = useState<Bracket | null>(null);
+  const { league, teams, games, bracket, setBracket } = useLeague();
   const [generating, setGenerating] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [resetting, setResetting] = useState(false);
 
-  useEffect(() => {
-    Promise.all([getLeague(id), getTeams(id), getGames(id), getBracket(id)]).then(
-      ([l, t, g, b]) => {
-        if (l) setLeague(l);
-        setTeams(t);
-        setGames(g);
-        setBracket(b);
-      }
-    );
-  }, [id]);
-
   const seedMap = useMemo(() => {
-    if (!league) return {} as Record<string, number>;
-    const seeded = computeSeedings([...teams], games, league.scoringRules);
+    const seeded = computeSeedings(teams, games, league.scoringRules);
     const map: Record<string, number> = {};
     seeded.forEach((t, i) => { map[t.id] = i + 1; });
     return map;
-  }, [teams, games, league]);
+  }, [teams, games, league.scoringRules]);
 
   async function handleGenerate() {
-    if (!league) return;
     setGenerating(true);
-    const seeded = computeSeedings([...teams], games, league.scoringRules);
-    const rounds = generateBracket(seeded);
-    const newBracket: Omit<Bracket, "id"> = { rounds, generatedAt: Date.now(), status: "active" };
-    const bracketId = await saveBracket(id, newBracket);
-    setBracket({ id: bracketId, ...newBracket });
-    setGenerating(false);
+    try {
+      const rounds = generateBracket(computeSeedings(teams, games, league.scoringRules));
+      const newBracket: Omit<Bracket, "id"> = { rounds, generatedAt: Date.now(), status: "active" };
+      const bracketId = await saveBracket(id, newBracket);
+      setBracket({ id: bracketId, ...newBracket });
+    } finally {
+      setGenerating(false);
+    }
   }
 
   async function handleDeleteBracket() {
     if (!bracket) return;
     setDeleting(true);
-    await deleteBracket(id, bracket.id);
-    setBracket(null);
-    setDeleting(false);
-    setShowDeleteModal(false);
+    try {
+      await deleteBracket(id, bracket.id);
+      setBracket(null);
+      setShowDeleteModal(false);
+    } finally {
+      setDeleting(false);
+    }
   }
 
   async function handlePickWinner(roundIdx: number, matchIdx: number, winnerId: string) {
@@ -72,15 +62,16 @@ export default function BracketPage() {
   async function handleReset() {
     if (!bracket) return;
     setResetting(true);
-    const rounds = clearResults(bracket.rounds);
-    setBracket({ ...bracket, rounds });
-    await updateBracket(id, bracket.id, rounds);
-    setResetting(false);
+    try {
+      const rounds = clearResults(bracket.rounds);
+      setBracket({ ...bracket, rounds });
+      await updateBracket(id, bracket.id, rounds);
+    } finally {
+      setResetting(false);
+    }
   }
 
   const teamName = (tid: string) => teams.find((t) => t.id === tid)?.name ?? "TBD";
-
-  if (!league) return <div className="py-20 text-center" style={{ color: "var(--muted)" }}>Loading…</div>;
 
   const champion = bracket ? championId(bracket.rounds) : null;
   const remaining = bracket ? countRemaining(bracket.rounds) : 0;

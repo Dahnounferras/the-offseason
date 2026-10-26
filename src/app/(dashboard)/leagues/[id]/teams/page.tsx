@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import { getLeague, getTeams, getGames, addTeam, deleteTeam } from "@/lib/firestore/leagues";
-import type { League, Team, Game } from "@/types";
+import { getTeams, addTeam, deleteTeam } from "@/lib/firestore/leagues";
+import type { Team } from "@/types";
+import { useLeague } from "@/hooks/useLeague";
 import { computeStandings } from "@/lib/standings";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
@@ -13,22 +14,12 @@ import ConfirmModal from "@/components/ui/ConfirmModal";
 
 export default function TeamsPage() {
   const { id } = useParams<{ id: string }>();
-  const [league, setLeague] = useState<League | null>(null);
-  const [teams, setTeams] = useState<Team[]>([]);
-  const [games, setGames] = useState<Game[]>([]);
+  const { league, teams, games, setTeams, setGames } = useLeague();
   const [newTeamName, setNewTeamName] = useState("");
   const [addingTeam, setAddingTeam] = useState(false);
   const [confirmDeleteTeam, setConfirmDeleteTeam] = useState<Team | null>(null);
   const [deletingTeamId, setDeletingTeamId] = useState<string | null>(null);
   const [deletingModal, setDeletingModal] = useState(false);
-
-  useEffect(() => {
-    Promise.all([getLeague(id), getTeams(id), getGames(id)]).then(([l, t, g]) => {
-      if (l) setLeague(l);
-      setTeams(t);
-      setGames(g);
-    });
-  }, [id]);
 
   async function handleAddTeam() {
     if (!newTeamName.trim()) return;
@@ -49,20 +40,15 @@ export default function TeamsPage() {
     setDeletingTeamId(confirmDeleteTeam.id);
     try {
       await deleteTeam(id, confirmDeleteTeam.id);
-      setTeams((prev) => prev.filter((t) => t.id !== confirmDeleteTeam.id));
+      const teamId = confirmDeleteTeam.id;
+      setTeams((prev) => prev.filter((t) => t.id !== teamId));
+      // deleteTeam also deleted every game this team played.
+      setGames((prev) => prev.filter((g) => g.homeTeamId !== teamId && g.awayTeamId !== teamId));
       setConfirmDeleteTeam(null);
     } finally {
       setDeletingTeamId(null);
       setDeletingModal(false);
     }
-  }
-
-  if (!league) {
-    return (
-      <div className="flex items-center justify-center py-20" style={{ color: "var(--muted)" }}>
-        Loading…
-      </div>
-    );
   }
 
   const standings = computeStandings(teams, games, league.scoringRules);

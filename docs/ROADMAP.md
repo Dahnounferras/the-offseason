@@ -9,11 +9,11 @@ Living plan from the October 2026 repo review. Update it as items land.
 | 1 | Commit WIP (spinners, reset league) | ✅ Done (`4d90863`) |
 | 2 | Seeding bug, Firestore security rules, reset/delete cleanup | ✅ Done |
 | 3 | Dead code + tooling cleanup, CI | ✅ Done |
-| 4 | Extract shared components + league data hook | ⏳ Next |
-| 5 | UX pass (tab bar, toasts, mobile) | |
+| 4 | Extract shared components + league data hook | ✅ Done (branch `step-4-refactor`) |
+| 5 | UX pass (tab bar, toasts, mobile) | ⏳ Next |
 | 6 | Public league pages | |
 
-Do step 4 before step 5. Most UI exists in 2–4 copies right now, so every UX change would have to be made several times.
+Step 4 removed most of the duplicated UI, so a UX change in step 5 now usually means editing one shared component.
 
 ## Step 2: what changed
 
@@ -63,7 +63,43 @@ Do step 4 before step 5. Most UI exists in 2–4 copies right now, so every UX c
   - Vitest says to replace the `vite-tsconfig-paths` plugin with `resolve.tsconfigPaths: true`.
   - Add a `typecheck` script and a GitHub Actions CI job: lint, typecheck, test.
 
-## Step 4: structural refactor
+## Step 4: what changed
+
+Done in six commits on `step-4-refactor`. Each one passes lint, typecheck, tests and build.
+
+- **Theme tokens.** The CSS variables are mapped in `@theme`, so `bg-surface`, `bg-surface-2`, `text-muted`, `border-border`, `text-accent`, `text-win/loss/tie` and so on work as classes. Inline `style={{…}}` blocks went from 447 to 272. The rest are mostly in the landing page, `LeaguePreview` and the parts of pages that weren't extracted.
+- **UI primitives** (`src/components/ui/`): `Button` (variants, `loading`, and `buttonClasses()` for links), `Modal` (Escape closes it, `role="dialog"`), `ConfirmModal` and `Input` (`tone`, `compact`). All 9 hand-rolled modals use them.
+- **Stats.** `src/lib/stats.ts` has season totals, per-game averages and stat-entry drafts. `StatGrid` is used by the stats Game Log and the game page box scores. `SeasonStatsTable` is used by the stats page. `statCells` holds the shared header and value cells. `StandingsTable` is used by the overview (full columns) and the teams page (compact columns plus actions).
+- **Bracket.** `BracketView` renders both the overview preview (read-only) and the bracket page (clickable). `src/lib/bracketLayout.ts` has the layout maths. The pure `advanceWinner` and `clearResults` in `src/lib/bracket.ts` replaced the in-page `JSON.parse(JSON.stringify(…))` mutation.
+- **Roster.**
+  - `src/lib/roster.ts` has the form helpers and the jersey check.
+  - The `useRoster` hook handles add, edit and remove.
+  - `PlayerForm` renders the fields inline or stacked.
+  - `RosterEditor` is the overview's roster modal.
+  - Behavior changes:
+    - The modal now rejects duplicate jersey numbers.
+    - Adding a player appends it locally with no re-fetch.
+    - Enter saves an edit.
+    - The team page's Edit button now shows. It used to be permanently invisible because its row lacked the `group` class.
+- **Shared league data.** `leagues/[id]/layout.tsx` wraps every tab in `LeagueProvider` (`src/hooks/useLeague.tsx`). The provider loads the league, teams, games (sorted by game number) and bracket once. Pages read from `useLeague()` and write back through its setters, so changes show on other tabs without a reload. Deleting a team also drops its games from the shared state.
+- **Error states.** A missing or soft-deleted league shows "League not found". A `permission-denied` error shows "No access". The rules deny reads of nonexistent IDs, so a made-up URL lands on this screen too. Any other error shows a message with "Try again". A missing game or team shows its own message. Every write handler resets its spinner in `finally`.
+- **Tests:** 95 → 151.
+
+### Follow-ups from step 4
+
+- **Browser check (not done yet).** Nobody has clicked through steps 4.2–4.6 yet. Fold in the step 3 smoke test above, plus:
+  - Open a roster from the overview and try a duplicate jersey number.
+  - Edit a player on the team page.
+  - Advance a team in the full bracket, go back to the overview, and confirm the preview matches without a reload.
+  - Record a score on a game page, then check the Games and Stats tabs.
+  - Press Escape on each modal.
+  - Open `/leagues/does-not-exist` and confirm the "No access" screen.
+- **Merge order.** `step-4-refactor` is branched from `step-3-cleanup`, which isn't on `main` yet. Merge step 3 first.
+- **Failed writes are silent.** Spinners now reset, but the user still sees no message, and the console shows an unhandled rejection. The step 5 toasts should catch these.
+- **Players aren't in the shared state.** The stats page loads every roster, and the team and game pages load their own. A roster edit on one tab is only seen on another tab after it re-mounts. Move players into the provider if this becomes noticeable.
+- **Left as is:** the overview header buttons and row-2 actions. Step 5 replaces them with a tab bar and a settings menu.
+
+## Step 4: original plan
 
 The pages are 400–900-line client components that duplicate each other.
 

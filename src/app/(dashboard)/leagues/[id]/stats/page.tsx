@@ -3,14 +3,9 @@
 import { useEffect, useState, useMemo } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import {
-  getLeague,
-  getTeams,
-  getGames,
-  getPlayers,
-  saveGameStatLines,
-} from "@/lib/firestore/leagues";
-import type { League, Team, Game, Player } from "@/types";
+import { getPlayers, saveGameStatLines } from "@/lib/firestore/leagues";
+import type { Game, Player } from "@/types";
+import { useLeague } from "@/hooks/useLeague";
 import { getSportConfig } from "@/lib/sportConfig";
 import Spinner from "@/components/Spinner";
 import { computeSeasonTotals, buildStatDraft, draftToStatLines, type StatDraft } from "@/lib/stats";
@@ -21,9 +16,7 @@ type PlayerInfo = { player: Player; teamName: string };
 
 export default function StatsPage() {
   const { id } = useParams<{ id: string }>();
-  const [league, setLeague] = useState<League | null>(null);
-  const [teams, setTeams] = useState<Team[]>([]);
-  const [games, setGames] = useState<Game[]>([]);
+  const { league, teams, games, setGames } = useLeague();
   const [playerMap, setPlayerMap] = useState<Map<string, PlayerInfo>>(new Map());
   const [activeTab, setActiveTab] = useState<"season" | "game">("season");
   const [selectedGameId, setSelectedGameId] = useState<string | null>(null);
@@ -32,13 +25,9 @@ export default function StatsPage() {
   const [savingStats, setSavingStats] = useState(false);
 
   useEffect(() => {
-    Promise.all([getLeague(id), getTeams(id), getGames(id)]).then(async ([l, t, g]) => {
-      if (l) setLeague(l);
-      setTeams(t);
-      setGames(g.sort((a, b) => (a.gameNumber ?? 0) - (b.gameNumber ?? 0)));
-      const allPlayers = await Promise.all(
-        t.map((team) => getPlayers(id, team.id).then((ps) => ({ team, players: ps })))
-      );
+    Promise.all(
+      teams.map((team) => getPlayers(id, team.id).then((ps) => ({ team, players: ps })))
+    ).then((allPlayers) => {
       const map = new Map<string, PlayerInfo>();
       for (const { team, players } of allPlayers) {
         for (const player of players) {
@@ -47,11 +36,11 @@ export default function StatsPage() {
       }
       setPlayerMap(map);
     });
-  }, [id]);
+  }, [id, teams]);
 
   const sportConfig = useMemo(
-    () => getSportConfig(league?.sport ?? "Basketball"),
-    [league]
+    () => getSportConfig(league.sport),
+    [league.sport]
   );
   const statKeys = sportConfig.statKeys;
 
@@ -107,14 +96,6 @@ export default function StatsPage() {
   }
 
   const seasonRows = [...playerMap.values()];
-
-  if (!league) {
-    return (
-      <div className="py-20 text-center" style={{ color: "var(--muted)" }}>
-        Loading…
-      </div>
-    );
-  }
 
   return (
     <div>
