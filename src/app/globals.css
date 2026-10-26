@@ -18,6 +18,16 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-dim: var(--accent-dim);
+  --color-muted: var(--muted);
+  --color-border: var(--border);
+  --color-win: var(--win);
+  --color-loss: var(--loss);
+  --color-tie: var(--tie);
 }
 
 body {
