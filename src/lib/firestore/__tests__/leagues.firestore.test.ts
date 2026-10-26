@@ -98,24 +98,24 @@ describe("getUserLeagues", () => {
 describe("createLeague", () => {
   it("calls addDoc with createdAt as a number", async () => {
     vi.mocked(addDoc).mockResolvedValueOnce({ id: "new-id" } as never);
-    await createLeague({ name: "Fall League", sport: "Football", ownerId: "u1", isPublic: false, season: { totalGames: 10, currentGame: 0 }, scoringRules: { win: 2, tie: 1, loss: 0 } });
+    await createLeague({ name: "Fall League", sport: "Football", ownerId: "u1", isPublic: false, season: { totalGames: 10 }, scoringRules: { win: 2, tie: 1, loss: 0 } });
     const payload = vi.mocked(addDoc).mock.calls[0][1] as unknown as Record<string, unknown>;
     expect(typeof payload.createdAt).toBe("number");
   });
 
   it("returns the new document id", async () => {
     vi.mocked(addDoc).mockResolvedValueOnce({ id: "created-123" } as never);
-    const id = await createLeague({ name: "X", sport: "Soccer", ownerId: "u1", isPublic: false, season: { totalGames: 5, currentGame: 0 }, scoringRules: { win: 2, tie: 1, loss: 0 } });
+    const id = await createLeague({ name: "X", sport: "Soccer", ownerId: "u1", isPublic: false, season: { totalGames: 5 }, scoringRules: { win: 2, tie: 1, loss: 0 } });
     expect(id).toBe("created-123");
   });
 });
 
 describe("addTeam", () => {
-  it("creates team with default win/loss/ties of 0", async () => {
+  it("creates team with just a name", async () => {
     vi.mocked(addDoc).mockResolvedValueOnce({ id: "team-1" } as never);
     await addTeam("league-1", "Hawks");
     const payload = vi.mocked(addDoc).mock.calls[0][1] as unknown as Record<string, unknown>;
-    expect(payload).toMatchObject({ name: "Hawks", wins: 0, losses: 0, ties: 0 });
+    expect(payload).toEqual({ name: "Hawks" });
   });
 
   it("returns the new team id", async () => {
@@ -326,15 +326,12 @@ describe("deleteTeam", () => {
 });
 
 describe("resetLeague", () => {
-  it("deletes games and brackets and clears player stats", async () => {
+  it("deletes games and brackets", async () => {
     vi.mocked(getDocs)
       .mockResolvedValueOnce(refSnap(["l1/games/g1"]) as never)
-      .mockResolvedValueOnce(refSnap(["l1/brackets/b1"]) as never)
-      .mockResolvedValueOnce(refSnap(["l1/teams/t1"]) as never)
-      .mockResolvedValueOnce(refSnap(["l1/teams/t1/players/p1"]) as never);
+      .mockResolvedValueOnce(refSnap(["l1/brackets/b1"]) as never);
     await resetLeague("l1");
     expect(deletedPaths()).toEqual(["l1/games/g1", "l1/brackets/b1"]);
-    expect(batches[0].update).toHaveBeenCalledWith({ path: "l1/teams/t1/players/p1" }, { stats: {} });
     expect(batches[0].commit).toHaveBeenCalledTimes(1);
   });
 });

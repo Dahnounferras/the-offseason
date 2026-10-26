@@ -5,7 +5,7 @@ import type { Team, Game, League, BracketMatchup } from "@/types";
 const rules: League["scoringRules"] = { win: 2, tie: 1, loss: 0 };
 
 function makeTeam(id: string): Team {
-  return { id, name: id, wins: 0, losses: 0, ties: 0 };
+  return { id, name: id };
 }
 
 function makeGame(homeTeamId: string, awayTeamId: string, homeScore: number, awayScore: number): Game {

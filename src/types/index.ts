@@ -3,7 +3,7 @@ export interface League {
   name: string;
   sport: string;
   ownerId: string;
-  season: { totalGames: number; currentGame: number };
+  season: { totalGames: number };
   scoringRules: { win: number; tie: number; loss: number };
   isPublic: boolean;
   createdAt: number;
@@ -13,9 +13,6 @@ export interface League {
 export interface Team {
   id: string;
   name: string;
-  wins: number;
-  losses: number;
-  ties: number;
   seed?: number;
 }
 
@@ -25,7 +22,6 @@ export interface Player {
   lastName: string;
   jerseyNumber?: number;
   teamId: string;
-  stats: Record<string, number>;
 }
 
 export interface StatLine {

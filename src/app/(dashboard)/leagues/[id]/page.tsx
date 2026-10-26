@@ -98,7 +98,6 @@ export default function LeaguePage() {
         firstName: playerForm.firstName.trim(),
         lastName: playerForm.lastName.trim(),
         teamId: rosterTeam.id,
-        stats: {},
       };
       if (playerForm.jerseyNumber.trim()) {
         playerData.jerseyNumber = Number(playerForm.jerseyNumber);
