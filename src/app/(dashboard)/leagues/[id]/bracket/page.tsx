@@ -7,6 +7,7 @@ import { getLeague, getTeams, getGames, getBracket, saveBracket, deleteBracket, 
 import type { League, Team, Game, Bracket, BracketMatchup } from "@/types";
 import { computeSeedings, generateBracket, cascadeClear } from "@/lib/bracket";
 import Spinner from "@/components/Spinner";
+import ConfirmModal from "@/components/ui/ConfirmModal";
 
 const TEAM_ROW_H = 40;
 const CARD_H = TEAM_ROW_H * 2;
@@ -457,36 +458,17 @@ export default function BracketPage() {
         </>
       )}
 
-      {/* Delete bracket modal */}
       {showDeleteModal && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50">
-          <div
-            className="w-full max-w-sm p-6 rounded-2xl"
-            style={{ background: "var(--surface)", border: "1px solid var(--border)" }}
-          >
-            <h2 className="text-lg font-bold mb-2">Delete this bracket?</h2>
-            <p className="text-sm mb-6" style={{ color: "var(--muted)" }}>
-              This will permanently remove the tournament bracket. You can generate a new one after.
-            </p>
-            <div className="flex gap-3">
-              <button
-                onClick={() => setShowDeleteModal(false)}
-                className="cursor-pointer flex-1 py-2 rounded-lg text-sm"
-                style={{ background: "var(--surface-2)", color: "var(--muted)" }}
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleDeleteBracket}
-                disabled={deleting}
-                className="cursor-pointer flex-1 py-2 rounded-lg text-sm font-semibold disabled:opacity-50"
-                style={{ background: "var(--loss)", color: "#fff" }}
-              >
-                {deleting ? <><Spinner /> Deleting…</> : "Delete Bracket"}
-              </button>
-            </div>
-          </div>
-        </div>
+        <ConfirmModal
+          title="Delete this bracket?"
+          confirmLabel="Delete Bracket"
+          busyLabel="Deleting…"
+          busy={deleting}
+          onConfirm={handleDeleteBracket}
+          onCancel={() => setShowDeleteModal(false)}
+        >
+          This will permanently remove the tournament bracket. You can generate a new one after.
+        </ConfirmModal>
       )}
     </div>
   );

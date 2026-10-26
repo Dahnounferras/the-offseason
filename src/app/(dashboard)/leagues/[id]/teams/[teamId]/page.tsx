@@ -8,6 +8,7 @@ import type { League, Team, Game, Player } from "@/types";
 import { computeStandings } from "@/lib/standings";
 import { getSportConfig } from "@/lib/sportConfig";
 import Spinner from "@/components/Spinner";
+import ConfirmModal from "@/components/ui/ConfirmModal";
 
 export default function TeamDetailPage() {
   const { id, teamId } = useParams<{ id: string; teamId: string }>();
@@ -424,39 +425,20 @@ export default function TeamDetailPage() {
           )}
         </div>
       </div>
-      {/* Delete player confirmation modal */}
       {confirmDeletePlayer && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50">
-          <div
-            className="w-full max-w-sm p-6 rounded-2xl"
-            style={{ background: "var(--surface)", border: "1px solid var(--border)" }}
-          >
-            <h2 className="text-lg font-bold mb-2">Remove player?</h2>
-            <p className="text-sm mb-6" style={{ color: "var(--muted)" }}>
-              <span style={{ color: "var(--foreground)", fontWeight: 500 }}>
-                {confirmDeletePlayer.firstName} {confirmDeletePlayer.lastName}
-              </span>{" "}
-              will be removed from this roster. This cannot be undone.
-            </p>
-            <div className="flex gap-3">
-              <button
-                onClick={() => setConfirmDeletePlayer(null)}
-                className="cursor-pointer flex-1 py-2 rounded-lg text-sm"
-                style={{ background: "var(--surface-2)", color: "var(--muted)", border: "1px solid var(--border)" }}
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleDeletePlayer}
-                disabled={deletingModal}
-                className="cursor-pointer flex-1 py-2 rounded-lg text-sm font-semibold disabled:opacity-50"
-                style={{ background: "var(--loss)", color: "#fff" }}
-              >
-                {deletingModal ? <><Spinner /> Removing…</> : "Remove"}
-              </button>
-            </div>
-          </div>
-        </div>
+        <ConfirmModal
+          title="Remove player?"
+          confirmLabel="Remove"
+          busyLabel="Removing…"
+          busy={deletingModal}
+          onConfirm={handleDeletePlayer}
+          onCancel={() => setConfirmDeletePlayer(null)}
+        >
+          <span className="text-foreground font-medium">
+            {confirmDeletePlayer.firstName} {confirmDeletePlayer.lastName}
+          </span>{" "}
+          will be removed from this roster. This cannot be undone.
+        </ConfirmModal>
       )}
     </div>
   );

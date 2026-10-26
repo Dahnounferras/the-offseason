@@ -5,7 +5,9 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/hooks/useAuth";
 import { getUserLeagues, createLeague } from "@/lib/firestore/leagues";
-import Spinner from "@/components/Spinner";
+import Button from "@/components/ui/Button";
+import Input, { inputClasses } from "@/components/ui/Input";
+import Modal from "@/components/ui/Modal";
 import type { League } from "@/types";
 
 const SPORTS = ["Basketball", "Soccer", "Softball", "Football", "Volleyball", "Hockey", "Other"];
@@ -140,96 +142,68 @@ export default function DashboardPage() {
       )}
 
       {showCreate && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50">
-          <div
-            className="w-full max-w-md p-6 rounded-2xl"
-            style={{ background: "var(--surface)", border: "1px solid var(--border)" }}
-          >
-            <h2 className="text-lg font-bold mb-4">Create a League</h2>
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium mb-1">League Name</label>
-                <input
-                  type="text"
-                  value={form.name}
-                  onChange={(e) => setForm({ ...form, name: e.target.value })}
-                  placeholder="Monday Night Hoops"
-                  className="w-full px-3 py-2 rounded-lg text-sm outline-none focus:ring-2"
-                  style={{
-                    background: "var(--surface-2)",
-                    border: "1px solid var(--border)",
-                    color: "var(--foreground)",
-                  }}
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium mb-1">Sport</label>
-                <select
-                  value={form.sport}
-                  onChange={(e) => setForm({ ...form, sport: e.target.value })}
-                  className="w-full px-3 py-2 rounded-lg text-sm outline-none"
-                  style={{
-                    background: "var(--surface-2)",
-                    border: "1px solid var(--border)",
-                    color: "var(--foreground)",
-                  }}
-                >
-                  {SPORTS.map((s) => <option key={s}>{s}</option>)}
-                </select>
-              </div>
-              {form.sport === "Other" && (
-                <div>
-                  <label className="block text-sm font-medium mb-1">Sport name</label>
-                  <input
-                    type="text"
-                    value={form.customSport}
-                    onChange={(e) => setForm({ ...form, customSport: e.target.value })}
-                    placeholder="e.g. Pickleball, Dodgeball…"
-                    className="w-full px-3 py-2 rounded-lg text-sm outline-none focus:ring-2"
-                    style={{
-                      background: "var(--surface-2)",
-                      border: "1px solid var(--border)",
-                      color: "var(--foreground)",
-                    }}
-                  />
-                </div>
-              )}
-              <div>
-                <label className="block text-sm font-medium mb-1">Season Length (games)</label>
-                <input
-                  type="number"
-                  min={1}
-                  max={100}
-                  value={form.totalGames}
-                  onChange={(e) => setForm({ ...form, totalGames: Number(e.target.value) })}
-                  className="w-full px-3 py-2 rounded-lg text-sm outline-none"
-                  style={{
-                    background: "var(--surface-2)",
-                    border: "1px solid var(--border)",
-                    color: "var(--foreground)",
-                  }}
-                />
-              </div>
+        <Modal size="md" onClose={() => setShowCreate(false)}>
+          <h2 className="text-lg font-bold mb-4">Create a League</h2>
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium mb-1">League Name</label>
+              <Input
+                type="text"
+                value={form.name}
+                onChange={(e) => setForm({ ...form, name: e.target.value })}
+                placeholder="Monday Night Hoops"
+                className="w-full focus:ring-2"
+              />
             </div>
-            <div className="flex gap-3 mt-6">
-              <button
-                onClick={() => setShowCreate(false)}
-                className="cursor-pointer flex-1 py-2 rounded-lg text-sm"
-                style={{ background: "var(--surface-2)", color: "var(--muted)" }}
+            <div>
+              <label className="block text-sm font-medium mb-1">Sport</label>
+              <select
+                value={form.sport}
+                onChange={(e) => setForm({ ...form, sport: e.target.value })}
+                className={`${inputClasses} w-full`}
               >
-                Cancel
-              </button>
-              <button
-                onClick={handleCreate}
-                disabled={saving || !form.name.trim()}
-                className="cursor-pointer flex-1 py-2 rounded-lg text-sm font-semibold disabled:opacity-50"
-                style={{ background: "var(--accent)", color: "#fff" }}
-              >
-                {saving ? <><Spinner /> Creating…</> : "Create League"}
-              </button>
+                {SPORTS.map((s) => <option key={s}>{s}</option>)}
+              </select>
+            </div>
+            {form.sport === "Other" && (
+              <div>
+                <label className="block text-sm font-medium mb-1">Sport name</label>
+                <Input
+                  type="text"
+                  value={form.customSport}
+                  onChange={(e) => setForm({ ...form, customSport: e.target.value })}
+                  placeholder="e.g. Pickleball, Dodgeball…"
+                  className="w-full focus:ring-2"
+                />
+              </div>
+            )}
+            <div>
+              <label className="block text-sm font-medium mb-1">Season Length (games)</label>
+              <Input
+                type="number"
+                min={1}
+                max={100}
+                value={form.totalGames}
+                onChange={(e) => setForm({ ...form, totalGames: Number(e.target.value) })}
+                className="w-full"
+              />
             </div>
           </div>
-        </div>
+          <div className="flex gap-3 mt-6">
+            <Button variant="ghost" onClick={() => setShowCreate(false)} className="flex-1">
+              Cancel
+            </Button>
+            <Button
+              onClick={handleCreate}
+              disabled={!form.name.trim()}
+              loading={saving}
+              loadingText="Creating…"
+              className="flex-1"
+            >
+              Create League
+            </Button>
+          </div>
+        </Modal>
       )}
     </div>
   );

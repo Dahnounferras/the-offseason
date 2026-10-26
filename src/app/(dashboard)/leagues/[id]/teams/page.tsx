@@ -6,7 +6,9 @@ import Link from "next/link";
 import { getLeague, getTeams, getGames, addTeam, deleteTeam } from "@/lib/firestore/leagues";
 import type { League, Team, Game } from "@/types";
 import { computeStandings } from "@/lib/standings";
-import Spinner from "@/components/Spinner";
+import Button from "@/components/ui/Button";
+import Input from "@/components/ui/Input";
+import ConfirmModal from "@/components/ui/ConfirmModal";
 
 export default function TeamsPage() {
   const { id } = useParams<{ id: string }>();
@@ -167,56 +169,37 @@ export default function TeamsPage() {
             Add a team
           </p>
           <div className="flex gap-2">
-            <input
+            <Input
               type="text"
               placeholder="Team name"
               value={newTeamName}
               onChange={(e) => setNewTeamName(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && handleAddTeam()}
-              className="flex-1 px-3 py-2 rounded-lg text-sm outline-none"
-              style={{ background: "var(--surface-2)", border: "1px solid var(--border)", color: "var(--foreground)" }}
+              className="flex-1"
             />
-            <button
+            <Button
               onClick={handleAddTeam}
-              disabled={addingTeam || !newTeamName.trim()}
-              className="cursor-pointer px-4 py-2 rounded-lg text-sm font-semibold disabled:opacity-50"
-              style={{ background: "var(--accent)", color: "#000" }}
+              disabled={!newTeamName.trim()}
+              loading={addingTeam}
+              loadingText="Adding…"
             >
-              {addingTeam ? <><Spinner /> Adding…</> : "Add"}
-            </button>
+              Add
+            </Button>
           </div>
         </div>
       </div>
       {confirmDeleteTeam && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50">
-          <div
-            className="w-full max-w-sm p-6 rounded-2xl"
-            style={{ background: "var(--surface)", border: "1px solid var(--border)" }}
-          >
-            <h2 className="text-lg font-bold mb-2">Delete team?</h2>
-            <p className="text-sm mb-6" style={{ color: "var(--muted)" }}>
-              <span style={{ color: "var(--foreground)", fontWeight: 500 }}>{confirmDeleteTeam.name}</span>{" "}
-              will be permanently removed, along with its roster and every game it plays in. This cannot be undone.
-            </p>
-            <div className="flex gap-3">
-              <button
-                onClick={() => setConfirmDeleteTeam(null)}
-                className="cursor-pointer flex-1 py-2 rounded-lg text-sm"
-                style={{ background: "var(--surface-2)", color: "var(--muted)", border: "1px solid var(--border)" }}
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleDeleteTeam}
-                disabled={deletingModal}
-                className="cursor-pointer flex-1 py-2 rounded-lg text-sm font-semibold disabled:opacity-50"
-                style={{ background: "var(--loss)", color: "#fff" }}
-              >
-                {deletingModal ? <><Spinner /> Deleting…</> : "Delete"}
-              </button>
-            </div>
-          </div>
-        </div>
+        <ConfirmModal
+          title="Delete team?"
+          confirmLabel="Delete"
+          busyLabel="Deleting…"
+          busy={deletingModal}
+          onConfirm={handleDeleteTeam}
+          onCancel={() => setConfirmDeleteTeam(null)}
+        >
+          <span className="text-foreground font-medium">{confirmDeleteTeam.name}</span>{" "}
+          will be permanently removed, along with its roster and every game it plays in. This cannot be undone.
+        </ConfirmModal>
       )}
     </div>
   );
