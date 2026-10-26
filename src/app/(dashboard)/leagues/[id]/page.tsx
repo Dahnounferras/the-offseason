@@ -4,10 +4,11 @@ import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { getLeague, getTeams, getGames, addTeam, getBracket, getPlayers, addPlayer, updatePlayer, scheduleGames, endLeague, deleteLeague, reactivateLeague } from "@/lib/firestore/leagues";
+import { getLeague, getTeams, getGames, addTeam, getBracket, getPlayers, addPlayer, updatePlayer, scheduleGames, endLeague, deleteLeague, reactivateLeague, resetLeague } from "@/lib/firestore/leagues";
 import type { League, Team, Game, Bracket, Player } from "@/types";
 import { generateSchedule } from "@/lib/schedule";
 import { computeStandings } from "@/lib/standings";
+import Spinner from "@/components/Spinner";
 
 const CARD_H = 80;
 const MATCH_GAP = 24;
@@ -60,6 +61,7 @@ export default function LeaguePage() {
   const [showEndModal, setShowEndModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showReactivateModal, setShowReactivateModal] = useState(false);
+  const [showResetModal, setShowResetModal] = useState(false);
   const [actioning, setActioning] = useState(false);
 
   useEffect(() => {
@@ -162,6 +164,15 @@ export default function LeaguePage() {
     router.push("/dashboard");
   }
 
+  async function handleReset() {
+    setActioning(true);
+    await resetLeague(id);
+    const updated = await getGames(id);
+    setGames(updated);
+    setActioning(false);
+    setShowResetModal(false);
+  }
+
   async function handleReactivate() {
     setActioning(true);
     await reactivateLeague(id);
@@ -213,7 +224,7 @@ export default function LeaguePage() {
                   className="cursor-pointer px-4 py-2 rounded-lg text-sm font-semibold disabled:opacity-50"
                   style={{ background: "var(--accent)", color: "#000" }}
                 >
-                  {starting ? "Generating…" : "Start League"}
+                  {starting ? <><Spinner /> Generating…</> : "Start League"}
                 </button>
               )}
               <Link
@@ -306,6 +317,15 @@ export default function LeaguePage() {
                   style={{ background: "var(--surface-2)", color: "var(--tie)", border: "1px solid var(--tie)" }}
                 >
                   End Season
+                </button>
+              )}
+              {games.length > 0 && league.status !== "ended" && (
+                <button
+                  onClick={() => setShowResetModal(true)}
+                  className="cursor-pointer px-3 py-1.5 rounded-lg text-xs font-semibold"
+                  style={{ background: "var(--surface-2)", color: "var(--loss)", border: "1px solid var(--loss)" }}
+                >
+                  Reset League
                 </button>
               )}
               <button
@@ -433,7 +453,7 @@ export default function LeaguePage() {
                 className="cursor-pointer px-3 py-2 rounded-lg text-sm font-semibold disabled:opacity-50"
                 style={{ background: "var(--accent)", color: "#fff" }}
               >
-                Add
+                {addingTeam ? <><Spinner /> Adding…</> : "Add"}
               </button>
             </div>
           </div>
@@ -677,7 +697,7 @@ export default function LeaguePage() {
                             className="cursor-pointer px-3 py-1.5 rounded-lg text-sm font-semibold disabled:opacity-50"
                             style={{ background: "var(--accent)", color: "#000" }}
                           >
-                            {savingPlayer ? "Saving…" : "Save"}
+                            {savingPlayer ? <><Spinner /> Saving…</> : "Save"}
                           </button>
                         </div>
                       </div>
@@ -754,7 +774,7 @@ export default function LeaguePage() {
                   className="cursor-pointer px-4 py-2 rounded-lg text-sm font-semibold disabled:opacity-50"
                   style={{ background: "var(--accent)", color: "#000" }}
                 >
-                  {addingPlayer ? "Adding…" : "Add"}
+                  {addingPlayer ? <><Spinner /> Adding…</> : "Add"}
                 </button>
               </div>
             </div>
@@ -787,7 +807,7 @@ export default function LeaguePage() {
                 className="cursor-pointer flex-1 py-2 rounded-lg text-sm font-semibold disabled:opacity-50"
                 style={{ background: "var(--tie)", color: "#000" }}
               >
-                {actioning ? "Ending…" : "End Season"}
+                {actioning ? <><Spinner /> Ending…</> : "End Season"}
               </button>
             </div>
           </div>
@@ -819,7 +839,39 @@ export default function LeaguePage() {
                 className="cursor-pointer flex-1 py-2 rounded-lg text-sm font-semibold disabled:opacity-50"
                 style={{ background: "var(--accent)", color: "#000" }}
               >
-                {actioning ? "Reactivating…" : "Reactivate"}
+                {actioning ? <><Spinner /> Reactivating…</> : "Reactivate"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Reset League modal */}
+      {showResetModal && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50">
+          <div
+            className="w-full max-w-sm p-6 rounded-2xl"
+            style={{ background: "var(--surface)", border: "1px solid var(--border)" }}
+          >
+            <h2 className="text-lg font-bold mb-2">Reset this league?</h2>
+            <p className="text-sm mb-6" style={{ color: "var(--muted)" }}>
+              All game results and player stats will be cleared. Teams and rosters are kept. The schedule will need to be re-generated.
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowResetModal(false)}
+                className="cursor-pointer flex-1 py-2 rounded-lg text-sm"
+                style={{ background: "var(--surface-2)", color: "var(--muted)" }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleReset}
+                disabled={actioning}
+                className="cursor-pointer flex-1 py-2 rounded-lg text-sm font-semibold disabled:opacity-50"
+                style={{ background: "var(--loss)", color: "#fff" }}
+              >
+                {actioning ? <><Spinner /> Resetting…</> : "Reset League"}
               </button>
             </div>
           </div>
@@ -851,7 +903,7 @@ export default function LeaguePage() {
                 className="cursor-pointer flex-1 py-2 rounded-lg text-sm font-semibold disabled:opacity-50"
                 style={{ background: "var(--loss)", color: "#fff" }}
               >
-                {actioning ? "Deleting…" : "Delete League"}
+                {actioning ? <><Spinner /> Deleting…</> : "Delete League"}
               </button>
             </div>
           </div>

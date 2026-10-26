@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/hooks/useAuth";
 import { getUserLeagues, createLeague } from "@/lib/firestore/leagues";
+import Spinner from "@/components/Spinner";
 import type { League } from "@/types";
 
 const SPORTS = ["Basketball", "Soccer", "Softball", "Football", "Volleyball", "Hockey", "Other"];
@@ -224,7 +225,7 @@ export default function DashboardPage() {
                 className="cursor-pointer flex-1 py-2 rounded-lg text-sm font-semibold disabled:opacity-50"
                 style={{ background: "var(--accent)", color: "#fff" }}
               >
-                {saving ? "Creating…" : "Create League"}
+                {saving ? <><Spinner /> Creating…</> : "Create League"}
               </button>
             </div>
           </div>

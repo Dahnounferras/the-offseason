@@ -7,6 +7,7 @@ import { getLeague, getTeams, getGames, getPlayers, addPlayer, updatePlayer, del
 import type { League, Team, Game, Player } from "@/types";
 import { computeStandings } from "@/lib/standings";
 import { getSportConfig } from "@/lib/sportConfig";
+import Spinner from "@/components/Spinner";
 
 export default function TeamDetailPage() {
   const { id, teamId } = useParams<{ id: string; teamId: string }>();
@@ -23,6 +24,7 @@ export default function TeamDetailPage() {
   const [savingPlayer, setSavingPlayer] = useState(false);
   const [deletingPlayerId, setDeletingPlayerId] = useState<string | null>(null);
   const [confirmDeletePlayer, setConfirmDeletePlayer] = useState<Player | null>(null);
+  const [deletingModal, setDeletingModal] = useState(false);
 
   useEffect(() => {
     Promise.all([getLeague(id), getTeams(id), getGames(id), getPlayers(id, teamId)]).then(
@@ -108,13 +110,15 @@ export default function TeamDetailPage() {
 
   async function handleDeletePlayer() {
     if (!confirmDeletePlayer) return;
+    setDeletingModal(true);
     setDeletingPlayerId(confirmDeletePlayer.id);
-    setConfirmDeletePlayer(null);
     try {
       await deletePlayer(id, teamId, confirmDeletePlayer.id);
       setPlayers((prev) => prev.filter((p) => p.id !== confirmDeletePlayer.id));
+      setConfirmDeletePlayer(null);
     } finally {
       setDeletingPlayerId(null);
+      setDeletingModal(false);
     }
   }
 
@@ -291,7 +295,7 @@ export default function TeamDetailPage() {
                             className="cursor-pointer px-3 py-1.5 rounded-lg text-sm font-semibold disabled:opacity-50"
                             style={{ background: "var(--accent)", color: "#000" }}
                           >
-                            {savingPlayer ? "Saving…" : "Save"}
+                            {savingPlayer ? <><Spinner /> Saving…</> : "Save"}
                           </button>
                         </div>
                         {editError && (
@@ -413,7 +417,7 @@ export default function TeamDetailPage() {
               className="cursor-pointer px-4 py-2 rounded-lg text-sm font-semibold disabled:opacity-50"
               style={{ background: "var(--accent)", color: "#000" }}
             >
-              {addingPlayer ? "Adding…" : "Add"}
+              {addingPlayer ? <><Spinner /> Adding…</> : "Add"}
             </button>
           </div>
           {addError && (
@@ -445,10 +449,11 @@ export default function TeamDetailPage() {
               </button>
               <button
                 onClick={handleDeletePlayer}
-                className="cursor-pointer flex-1 py-2 rounded-lg text-sm font-semibold"
+                disabled={deletingModal}
+                className="cursor-pointer flex-1 py-2 rounded-lg text-sm font-semibold disabled:opacity-50"
                 style={{ background: "var(--loss)", color: "#fff" }}
               >
-                Remove
+                {deletingModal ? <><Spinner /> Removing…</> : "Remove"}
               </button>
             </div>
           </div>

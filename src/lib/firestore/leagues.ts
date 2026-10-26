@@ -172,6 +172,21 @@ export async function reactivateLeague(leagueId: string): Promise<void> {
   await updateLeague(leagueId, { status: "active" });
 }
 
+export async function resetLeague(leagueId: string): Promise<void> {
+  const gamesSnap = await getDocs(collection(db, "leagues", leagueId, "games"));
+  await Promise.all(gamesSnap.docs.map((d) => deleteDoc(d.ref)));
+
+  const teamsSnap = await getDocs(collection(db, "leagues", leagueId, "teams"));
+  await Promise.all(
+    teamsSnap.docs.map(async (teamDoc) => {
+      const playersSnap = await getDocs(
+        collection(db, "leagues", leagueId, "teams", teamDoc.id, "players")
+      );
+      await Promise.all(playersSnap.docs.map((p) => updateDoc(p.ref, { stats: {} })));
+    })
+  );
+}
+
 export async function deleteLeague(leagueId: string): Promise<void> {
   await updateLeague(leagueId, { status: "deleted" });
 }

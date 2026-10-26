@@ -6,6 +6,7 @@ import Link from "next/link";
 import { getLeague, getTeams, getGames, addTeam, deleteTeam } from "@/lib/firestore/leagues";
 import type { League, Team, Game } from "@/types";
 import { computeStandings } from "@/lib/standings";
+import Spinner from "@/components/Spinner";
 
 export default function TeamsPage() {
   const { id } = useParams<{ id: string }>();
@@ -16,6 +17,7 @@ export default function TeamsPage() {
   const [addingTeam, setAddingTeam] = useState(false);
   const [confirmDeleteTeam, setConfirmDeleteTeam] = useState<Team | null>(null);
   const [deletingTeamId, setDeletingTeamId] = useState<string | null>(null);
+  const [deletingModal, setDeletingModal] = useState(false);
 
   useEffect(() => {
     Promise.all([getLeague(id), getTeams(id), getGames(id)]).then(([l, t, g]) => {
@@ -40,13 +42,15 @@ export default function TeamsPage() {
 
   async function handleDeleteTeam() {
     if (!confirmDeleteTeam) return;
+    setDeletingModal(true);
     setDeletingTeamId(confirmDeleteTeam.id);
-    setConfirmDeleteTeam(null);
     try {
       await deleteTeam(id, confirmDeleteTeam.id);
       setTeams((prev) => prev.filter((t) => t.id !== confirmDeleteTeam.id));
+      setConfirmDeleteTeam(null);
     } finally {
       setDeletingTeamId(null);
+      setDeletingModal(false);
     }
   }
 
@@ -178,7 +182,7 @@ export default function TeamsPage() {
               className="cursor-pointer px-4 py-2 rounded-lg text-sm font-semibold disabled:opacity-50"
               style={{ background: "var(--accent)", color: "#000" }}
             >
-              {addingTeam ? "Adding…" : "Add"}
+              {addingTeam ? <><Spinner /> Adding…</> : "Add"}
             </button>
           </div>
         </div>
@@ -204,10 +208,11 @@ export default function TeamsPage() {
               </button>
               <button
                 onClick={handleDeleteTeam}
-                className="cursor-pointer flex-1 py-2 rounded-lg text-sm font-semibold"
+                disabled={deletingModal}
+                className="cursor-pointer flex-1 py-2 rounded-lg text-sm font-semibold disabled:opacity-50"
                 style={{ background: "var(--loss)", color: "#fff" }}
               >
-                Delete
+                {deletingModal ? <><Spinner /> Deleting…</> : "Delete"}
               </button>
             </div>
           </div>

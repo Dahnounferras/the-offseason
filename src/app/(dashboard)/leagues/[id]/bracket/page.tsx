@@ -6,6 +6,7 @@ import Link from "next/link";
 import { getLeague, getTeams, getGames, getBracket, saveBracket, deleteBracket, updateBracket } from "@/lib/firestore/leagues";
 import type { League, Team, Game, Bracket, BracketMatchup } from "@/types";
 import { computeSeedings, generateBracket, cascadeClear } from "@/lib/bracket";
+import Spinner from "@/components/Spinner";
 
 const TEAM_ROW_H = 40;
 const CARD_H = TEAM_ROW_H * 2;
@@ -62,6 +63,7 @@ export default function BracketPage() {
   const [generating, setGenerating] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [resetting, setResetting] = useState(false);
 
   useEffect(() => {
     Promise.all([getLeague(id), getTeams(id), getGames(id), getBracket(id)]).then(
@@ -126,6 +128,7 @@ export default function BracketPage() {
 
   async function handleReset() {
     if (!bracket) return;
+    setResetting(true);
     const reset: Bracket = JSON.parse(JSON.stringify(bracket));
     for (let r = 0; r < reset.rounds.length; r++) {
       for (const m of reset.rounds[r]) {
@@ -135,6 +138,7 @@ export default function BracketPage() {
     }
     setBracket(reset);
     await updateBracket(id, bracket.id, reset.rounds);
+    setResetting(false);
   }
 
   const teamName = (tid: string | null) =>
@@ -187,7 +191,7 @@ export default function BracketPage() {
                 className="cursor-pointer px-4 py-2 rounded-lg text-sm font-semibold disabled:opacity-50"
                 style={{ background: "var(--accent)", color: "#fff" }}
               >
-                {generating ? "Generating…" : "Generate Bracket"}
+                {generating ? <><Spinner /> Generating…</> : "Generate Bracket"}
               </button>
             )}
           </div>
@@ -437,7 +441,7 @@ export default function BracketPage() {
           {/* Reset button */}
           <button
             onClick={handleReset}
-            disabled={league.status === "ended"}
+            disabled={resetting || league.status === "ended"}
             className="cursor-pointer mt-6 flex items-center gap-2 disabled:opacity-30 disabled:cursor-not-allowed"
             style={{
               fontSize: 12,
@@ -448,7 +452,7 @@ export default function BracketPage() {
               color: "var(--muted)",
             }}
           >
-            ↺ Reset bracket
+            {resetting ? <><Spinner /> Resetting…</> : "↺ Reset bracket"}
           </button>
         </>
       )}
@@ -478,7 +482,7 @@ export default function BracketPage() {
                 className="cursor-pointer flex-1 py-2 rounded-lg text-sm font-semibold disabled:opacity-50"
                 style={{ background: "var(--loss)", color: "#fff" }}
               >
-                {deleting ? "Deleting…" : "Delete Bracket"}
+                {deleting ? <><Spinner /> Deleting…</> : "Delete Bracket"}
               </button>
             </div>
           </div>

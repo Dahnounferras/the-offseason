@@ -12,6 +12,7 @@ import {
 } from "@/lib/firestore/leagues";
 import type { League, Team, Game, Player, StatLine } from "@/types";
 import { getSportConfig } from "@/lib/sportConfig";
+import Spinner from "@/components/Spinner";
 
 type PlayerInfo = { player: Player; teamName: string };
 type DraftRow = Record<string, string>;
@@ -394,7 +395,7 @@ export default function StatsPage() {
                           className="cursor-pointer px-3 py-1 rounded-lg text-xs font-semibold disabled:opacity-50"
                           style={{ background: "var(--accent)", color: "#000" }}
                         >
-                          {savingStats ? "Saving…" : "Save Stats"}
+                          {savingStats ? <><Spinner /> Saving…</> : "Save Stats"}
                         </button>
                       </div>
                     )}

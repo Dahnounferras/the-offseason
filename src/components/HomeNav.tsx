@@ -4,9 +4,17 @@ import Link from "next/link";
 import { useAuth } from "@/hooks/useAuth";
 import { signOut } from "firebase/auth";
 import { auth } from "@/lib/firebase";
+import { useState } from "react";
+import Spinner from "@/components/Spinner";
 
 export default function HomeNav() {
   const { user, loading } = useAuth();
+  const [signingOut, setSigningOut] = useState(false);
+
+  async function handleSignOut() {
+    setSigningOut(true);
+    await signOut(auth);
+  }
 
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
@@ -76,18 +84,23 @@ export default function HomeNav() {
               {user.displayName ?? user.email}
             </span>
             <button
-              onClick={() => signOut(auth)}
+              onClick={handleSignOut}
+              disabled={signingOut}
               style={{
                 background: "none",
                 border: "none",
-                cursor: "pointer",
+                cursor: signingOut ? "default" : "pointer",
                 color: "var(--muted)",
                 fontSize: "0.75rem",
                 padding: 0,
                 marginLeft: 4,
+                opacity: signingOut ? 0.6 : 1,
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 4,
               }}
             >
-              Sign out
+              {signingOut ? <><Spinner /> Signing out…</> : "Sign out"}
             </button>
           </div>
         </>
