@@ -104,33 +104,7 @@ export default function StatsPage() {
 
   return (
     <div>
-      {/* Header */}
-      <div className="mb-6">
-        <div className="text-sm mb-1" style={{ color: "var(--muted)" }}>
-          <Link href="/dashboard" className="hover:underline">
-            My Leagues
-          </Link>
-          {" / "}
-          <Link href={`/leagues/${id}`} className="hover:underline">
-            {league.name}
-          </Link>
-          {" / Stats"}
-        </div>
-        <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-bold">Player Stats</h1>
-          <Link
-            href={`/leagues/${id}`}
-            className="px-4 py-2 rounded-lg text-sm font-semibold"
-            style={{
-              background: "var(--surface-2)",
-              color: "var(--foreground)",
-              border: "1px solid var(--border)",
-            }}
-          >
-            ← Back to League
-          </Link>
-        </div>
-      </div>
+      <h2 className="text-lg font-semibold mb-4">Player Stats</h2>
 
       {/* Tabs */}
       <div

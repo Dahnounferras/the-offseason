@@ -83,3 +83,15 @@ export function cascadeClear(
     cascadeClear(rounds, roundIdx + 1, nextMatchIdx);
   }
 }
+
+export const MIN_BRACKET_TEAMS = 3;
+
+// Why a new bracket can't be generated right now, or null when it can.
+export function bracketBlockedReason(
+  league: Pick<League, "status">,
+  teamCount: number
+): string | null {
+  if (league.status === "ended") return "Reactivate the league to generate a bracket.";
+  if (teamCount < MIN_BRACKET_TEAMS) return `Add at least ${MIN_BRACKET_TEAMS} teams to generate a bracket.`;
+  return null;
+}

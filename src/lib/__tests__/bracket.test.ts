@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { computeSeedings, generateBracket, cascadeClear, advanceWinner, clearResults } from "@/lib/bracket";
+import { computeSeedings, generateBracket, cascadeClear, advanceWinner, clearResults, bracketBlockedReason } from "@/lib/bracket";
 import type { Team, Game, League, BracketMatchup } from "@/types";
 
 const rules: League["scoringRules"] = { win: 2, tie: 1, loss: 0 };
@@ -256,5 +256,20 @@ describe("clearResults", () => {
     ]);
     expect(cleared[1]).toEqual([{ homeTeamId: null, awayTeamId: null, winnerId: null }]);
     expect(rounds[1][0].winnerId).toBe("A");
+  });
+});
+
+describe("bracketBlockedReason", () => {
+  it("blocks an ended league", () => {
+    expect(bracketBlockedReason({ status: "ended" }, 8)).toMatch(/Reactivate/);
+  });
+
+  it("needs at least 3 teams", () => {
+    expect(bracketBlockedReason({ status: "active" }, 2)).toMatch(/at least 3 teams/);
+  });
+
+  it("allows an active league with enough teams, including legacy leagues with no status", () => {
+    expect(bracketBlockedReason({ status: "active" }, 3)).toBeNull();
+    expect(bracketBlockedReason({}, 4)).toBeNull();
   });
 });

@@ -135,26 +135,11 @@ export default function GameDetailPage() {
 
   return (
     <div>
-      {/* Header */}
-      <div className="mb-8">
-        <div className="text-sm mb-1" style={{ color: "var(--muted)" }}>
-          <Link href="/dashboard" className="hover:underline">My Leagues</Link>
-          {" / "}
-          <Link href={`/leagues/${id}`} className="hover:underline">{league.name}</Link>
-          {" / "}
-          <Link href={`/leagues/${id}/games`} className="hover:underline">Games</Link>
-          {` / ${gameLabel}`}
-        </div>
-        <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-bold">{gameLabel}</h1>
-          <Link
-            href={`/leagues/${id}/games`}
-            className="px-4 py-2 rounded-lg text-sm font-semibold"
-            style={{ background: "var(--surface-2)", color: "var(--foreground)", border: "1px solid var(--border)" }}
-          >
-            ← Back to Games
-          </Link>
-        </div>
+      <div className="mb-6">
+        <Link href={`/leagues/${id}/games`} className="text-sm text-muted hover:underline">
+          ← All games
+        </Link>
+        <h2 className="text-xl font-bold mt-1">{gameLabel}</h2>
       </div>
 
       {/* Score section */}
@@ -275,7 +260,7 @@ export default function GameDetailPage() {
 
       {/* Stats section */}
       <div className="flex items-center justify-between mb-3">
-        <h2 className="font-semibold">Player Stats</h2>
+        <h3 className="font-semibold">Player Stats</h3>
         {!leagueEnded && (
           editingStats ? (
             <div className="flex gap-2">
