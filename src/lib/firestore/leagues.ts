@@ -143,6 +143,18 @@ export async function updateResult(
   await updateDoc(doc(db, "leagues", leagueId, "games", gameId), data);
 }
 
+// Sets or clears the optional date and location. undefined clears a field.
+export async function updateGameDetails(
+  leagueId: string,
+  gameId: string,
+  details: Pick<Game, "scheduledAt" | "location">
+): Promise<void> {
+  await updateDoc(doc(db, "leagues", leagueId, "games", gameId), {
+    scheduledAt: details.scheduledAt ?? deleteField(),
+    location: details.location ?? deleteField(),
+  });
+}
+
 export async function getPlayers(leagueId: string, teamId: string): Promise<Player[]> {
   const snap = await getDocs(collection(db, "leagues", leagueId, "teams", teamId, "players"));
   return snap.docs.map((d) => ({ id: d.id, ...d.data() } as Player));

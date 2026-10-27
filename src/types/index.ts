@@ -44,6 +44,9 @@ export interface Game {
   homeSportsmanship?: number;
   awaySportsmanship?: number;
   playedAt?: number;
+  // Optional schedule details, set from the game page.
+  scheduledAt?: number;
+  location?: string;
   statLines: StatLine[];
 }
 

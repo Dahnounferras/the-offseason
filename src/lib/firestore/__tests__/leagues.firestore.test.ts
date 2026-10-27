@@ -6,7 +6,7 @@ import {
 import {
   getLeague, getUserLeagues, createLeague, getGames,
   addTeam, deleteTeam, scheduleGames,
-  recordResult, updateResult, updatePlayer,
+  recordResult, updateResult, updatePlayer, updateGameDetails,
   endLeague, reactivateLeague, deleteLeague, resetLeague,
   getBracket, saveBracket, deleteBracket, updateBracket,
 } from "@/lib/firestore/leagues";
@@ -171,6 +171,23 @@ describe("scheduleGames", () => {
     expect(ref.path).toBe("leagues/league-1/games/auto-1");
     expect(payload.status).toBe("scheduled");
     expect(payload.statLines).toEqual([]);
+  });
+});
+
+describe("updateGameDetails", () => {
+  it("writes the date and location", async () => {
+    vi.mocked(updateDoc).mockResolvedValueOnce(undefined);
+    await updateGameDetails("l1", "g1", { scheduledAt: 1000, location: "Court 2" });
+    expect(updateDoc).toHaveBeenCalledWith({ path: "leagues/l1/games/g1" }, { scheduledAt: 1000, location: "Court 2" });
+  });
+
+  it("clears missing fields with deleteField", async () => {
+    vi.mocked(updateDoc).mockResolvedValueOnce(undefined);
+    await updateGameDetails("l1", "g1", {});
+    expect(updateDoc).toHaveBeenCalledWith(
+      { path: "leagues/l1/games/g1" },
+      { scheduledAt: { _type: "deleteField" }, location: { _type: "deleteField" } }
+    );
   });
 });
 
