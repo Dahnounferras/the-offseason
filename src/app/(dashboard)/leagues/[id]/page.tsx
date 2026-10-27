@@ -3,15 +3,13 @@
 import { useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { addTeam, scheduleGames, endLeague, deleteLeague, reactivateLeague, resetLeague } from "@/lib/firestore/leagues";
+import { addTeam, scheduleGames } from "@/lib/firestore/leagues";
 import type { Team } from "@/types";
 import { useLeague } from "@/hooks/useLeague";
 import { useToast } from "@/components/ui/Toast";
 import { errorMessage } from "@/lib/errors";
 import { generateSchedule } from "@/lib/schedule";
 import { computeStandings } from "@/lib/standings";
-import ConfirmModal from "@/components/ui/ConfirmModal";
 import Modal from "@/components/ui/Modal";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
@@ -21,18 +19,12 @@ import RosterEditor from "@/components/league/RosterEditor";
 
 export default function LeaguePage() {
   const { id } = useParams<{ id: string }>();
-  const router = useRouter();
-  const { league, teams, games, bracket, setLeague, setTeams, setGames, setBracket } = useLeague();
+  const { league, teams, games, bracket, setTeams, setGames } = useLeague();
   const toast = useToast();
   const [newTeamName, setNewTeamName] = useState("");
   const [addingTeam, setAddingTeam] = useState(false);
   const [rosterTeam, setRosterTeam] = useState<Team | null>(null);
   const [starting, setStarting] = useState(false);
-  const [showEndModal, setShowEndModal] = useState(false);
-  const [showDeleteModal, setShowDeleteModal] = useState(false);
-  const [showReactivateModal, setShowReactivateModal] = useState(false);
-  const [showResetModal, setShowResetModal] = useState(false);
-  const [actioning, setActioning] = useState(false);
 
   async function handleAddTeam() {
     if (!newTeamName.trim()) return;
@@ -62,102 +54,17 @@ export default function LeaguePage() {
     }
   }
 
-  // On success the page navigates away; finally only matters when the write fails.
-  async function handleEndSeason() {
-    setActioning(true);
-    try {
-      await endLeague(id);
-      router.push("/dashboard");
-    } catch (err) {
-      toast.error(errorMessage(err));
-    } finally {
-      setActioning(false);
-    }
-  }
-
-  async function handleDeleteLeague() {
-    setActioning(true);
-    try {
-      await deleteLeague(id);
-      router.push("/dashboard");
-    } catch (err) {
-      toast.error(errorMessage(err));
-    } finally {
-      setActioning(false);
-    }
-  }
-
-  async function handleReset() {
-    setActioning(true);
-    try {
-      await resetLeague(id);
-      setGames([]);
-      setBracket(null);
-      setShowResetModal(false);
-      toast.success("League reset. Teams and rosters were kept.");
-    } catch (err) {
-      toast.error(errorMessage(err));
-    } finally {
-      setActioning(false);
-    }
-  }
-
-  async function handleReactivate() {
-    setActioning(true);
-    try {
-      await reactivateLeague(id);
-      setLeague((l) => ({ ...l, status: "active" }));
-      setShowReactivateModal(false);
-    } catch (err) {
-      toast.error(errorMessage(err));
-    } finally {
-      setActioning(false);
-    }
-  }
-
   const standings = computeStandings(teams, games, league.scoringRules);
 
   return (
     <div>
-      {/* League actions; the destructive ones move to Settings in a later step. */}
-      <div className="flex flex-wrap items-center gap-2 mb-6">
-        {games.length === 0 && league.status !== "ended" && teams.length >= 2 && (
+      {games.length === 0 && league.status !== "ended" && teams.length >= 2 && (
+        <div className="mb-6">
           <Button onClick={handleStartLeague} loading={starting} loadingText="Generating…">
             Start League
           </Button>
-        )}
-        <div className="flex flex-wrap gap-2 ml-auto">
-          {league.status === "ended" ? (
-            <button
-              onClick={() => setShowReactivateModal(true)}
-              className="cursor-pointer px-3 py-1.5 rounded-lg text-xs font-semibold bg-surface-2 text-accent border border-accent"
-            >
-              Reactivate League
-            </button>
-          ) : (
-            <button
-              onClick={() => setShowEndModal(true)}
-              className="cursor-pointer px-3 py-1.5 rounded-lg text-xs font-semibold bg-surface-2 text-tie border border-tie"
-            >
-              End Season
-            </button>
-          )}
-          {games.length > 0 && league.status !== "ended" && (
-            <button
-              onClick={() => setShowResetModal(true)}
-              className="cursor-pointer px-3 py-1.5 rounded-lg text-xs font-semibold bg-surface-2 text-loss border border-loss"
-            >
-              Reset League
-            </button>
-          )}
-          <button
-            onClick={() => setShowDeleteModal(true)}
-            className="cursor-pointer px-3 py-1.5 rounded-lg text-xs font-semibold bg-surface-2 text-loss border border-loss"
-          >
-            Delete League
-          </button>
         </div>
-      </div>
+      )}
 
       {games.length === 0 && teams.length < 2 && league.status !== "ended" && (
         <div
@@ -256,59 +163,9 @@ export default function LeaguePage() {
         </Modal>
       )}
 
-      {showEndModal && (
-        <ConfirmModal
-          title="End this season?"
-          confirmLabel="End Season"
-          busyLabel="Ending…"
-          variant="warning"
-          busy={actioning}
-          onConfirm={handleEndSeason}
-          onCancel={() => setShowEndModal(false)}
-        >
-          The league will move to Past Leagues. Stats and standings are preserved.
-        </ConfirmModal>
-      )}
 
-      {showReactivateModal && (
-        <ConfirmModal
-          title="Reactivate this league?"
-          confirmLabel="Reactivate"
-          busyLabel="Reactivating…"
-          variant="primary"
-          busy={actioning}
-          onConfirm={handleReactivate}
-          onCancel={() => setShowReactivateModal(false)}
-        >
-          The league will move back to Active Leagues. You can create a new tournament bracket.
-        </ConfirmModal>
-      )}
 
-      {showResetModal && (
-        <ConfirmModal
-          title="Reset this league?"
-          confirmLabel="Reset League"
-          busyLabel="Resetting…"
-          busy={actioning}
-          onConfirm={handleReset}
-          onCancel={() => setShowResetModal(false)}
-        >
-          All game results, player stats and the tournament bracket will be cleared. Teams and rosters are kept. The schedule will need to be re-generated.
-        </ConfirmModal>
-      )}
 
-      {showDeleteModal && (
-        <ConfirmModal
-          title="Delete this league?"
-          confirmLabel="Delete League"
-          busyLabel="Deleting…"
-          busy={actioning}
-          onConfirm={handleDeleteLeague}
-          onCancel={() => setShowDeleteModal(false)}
-        >
-          This will permanently remove the league from your dashboard. This cannot be undone.
-        </ConfirmModal>
-      )}
     </div>
   );
 }

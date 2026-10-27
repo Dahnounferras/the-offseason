@@ -19,7 +19,9 @@ export default function GamesPage() {
         <h2 className="text-lg font-semibold">Games</h2>
         {league.status === "ended" && (
           <p className="text-sm mt-1 text-muted">
-            This season has ended. Reactivate the league to enter or edit results.
+            This season has ended.{" "}
+            <Link href={`/leagues/${id}/settings`} className="underline">Reactivate the league</Link>
+            {" "}to enter or edit results.
           </p>
         )}
       </div>

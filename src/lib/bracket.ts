@@ -91,7 +91,7 @@ export function bracketBlockedReason(
   league: Pick<League, "status">,
   teamCount: number
 ): string | null {
-  if (league.status === "ended") return "Reactivate the league to generate a bracket.";
+  if (league.status === "ended") return "Reactivate the league in Settings to generate a bracket.";
   if (teamCount < MIN_BRACKET_TEAMS) return `Add at least ${MIN_BRACKET_TEAMS} teams to generate a bracket.`;
   return null;
 }

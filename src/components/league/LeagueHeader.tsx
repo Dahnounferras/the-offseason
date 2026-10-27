@@ -11,6 +11,7 @@ const TABS: { label: string; segment: string | null }[] = [
   { label: "Stats", segment: "stats" },
   { label: "Teams", segment: "teams" },
   { label: "Bracket", segment: "bracket" },
+  { label: "Settings", segment: "settings" },
 ];
 
 // League title and tab bar, rendered once by the league layout above every tab.
