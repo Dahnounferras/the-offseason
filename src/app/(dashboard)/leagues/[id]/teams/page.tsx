@@ -64,7 +64,7 @@ export default function TeamsPage() {
     <div>
       <h2 className="text-lg font-semibold mb-4">Teams</h2>
 
-      <div className="rounded-xl overflow-hidden" style={{ border: "1px solid var(--border)" }}>
+      <div className="rounded-xl overflow-x-auto border border-border">
         {standings.length === 0 ? (
           <div className="py-12 text-center text-sm" style={{ color: "var(--muted)" }}>
             No teams yet. Add one below.

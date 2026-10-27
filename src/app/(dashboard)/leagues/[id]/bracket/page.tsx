@@ -12,7 +12,7 @@ import { championId, countRemaining } from "@/lib/bracketLayout";
 import Spinner from "@/components/Spinner";
 import ConfirmModal from "@/components/ui/ConfirmModal";
 import Button from "@/components/ui/Button";
-import BracketView from "@/components/league/BracketView";
+import ResponsiveBracket from "@/components/league/ResponsiveBracket";
 
 export default function BracketPage() {
   const { id } = useParams<{ id: string }>();
@@ -112,7 +112,7 @@ export default function BracketPage() {
           )}
         </div>
         {bracket && (
-          <p className="text-xs mt-1 flex items-center gap-2" style={{ color: "var(--muted)" }}>
+          <p className="text-xs mt-1 flex flex-wrap items-center gap-2 text-muted">
             <span>Generated {new Date(bracket.generatedAt).toLocaleDateString()}</span>
             <span style={{ width: 3, height: 3, borderRadius: "50%", background: "var(--border)", display: "inline-block", flexShrink: 0 }} />
             <span>{league.status === "ended" ? "Reactivate the league to edit this bracket" : "Click a team to advance them"}</span>
@@ -139,14 +139,12 @@ export default function BracketPage() {
         </div>
       ) : (
         <>
-          <div className="overflow-x-auto pb-4">
-            <BracketView
-              rounds={bracket.rounds}
-              teamName={teamName}
-              seedMap={seedMap}
-              onPick={league.status === "ended" ? undefined : handlePickWinner}
-            />
-          </div>
+          <ResponsiveBracket
+            rounds={bracket.rounds}
+            teamName={teamName}
+            seedMap={seedMap}
+            onPick={league.status === "ended" ? undefined : handlePickWinner}
+          />
 
           {/* Reset button */}
           <button

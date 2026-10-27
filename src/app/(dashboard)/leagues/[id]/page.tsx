@@ -14,7 +14,7 @@ import Modal from "@/components/ui/Modal";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
 import StandingsTable from "@/components/league/StandingsTable";
-import BracketView from "@/components/league/BracketView";
+import ResponsiveBracket from "@/components/league/ResponsiveBracket";
 import RosterEditor from "@/components/league/RosterEditor";
 import SetupChecklist from "@/components/league/SetupChecklist";
 import { setupSteps } from "@/lib/setup";
@@ -96,7 +96,7 @@ export default function LeaguePage() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2">
           <h2 className="font-semibold mb-3">Standings</h2>
-          <div className="rounded-xl overflow-hidden" style={{ border: "1px solid var(--border)" }}>
+          <div className="rounded-xl overflow-x-auto border border-border">
             <StandingsTable rows={standings} leagueId={id} emptyMessage="No teams yet. Add teams below." />
           </div>
         </div>
@@ -147,7 +147,7 @@ export default function LeaguePage() {
       {/* Tournament Bracket Preview */}
       {bracket && (
         <div className="mt-10">
-          <div className="flex items-center justify-between mb-4">
+          <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
             <div>
               <h2 className="font-semibold text-lg">Current Tournament Bracket</h2>
               <p className="text-xs mt-0.5 text-muted">
@@ -161,13 +161,11 @@ export default function LeaguePage() {
               Full bracket view →
             </Link>
           </div>
-          <div className="overflow-x-auto pb-2">
-            <BracketView
-              rounds={bracket.rounds}
-              teamName={(tid) => teams.find((t) => t.id === tid)?.name ?? "TBD"}
-              seedMap={Object.fromEntries(standings.map((row, i) => [row.team.id, i + 1]))}
-            />
-          </div>
+          <ResponsiveBracket
+            rounds={bracket.rounds}
+            teamName={(tid) => teams.find((t) => t.id === tid)?.name ?? "TBD"}
+            seedMap={Object.fromEntries(standings.map((row, i) => [row.team.id, i + 1]))}
+          />
         </div>
       )}
 

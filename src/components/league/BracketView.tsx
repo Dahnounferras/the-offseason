@@ -126,7 +126,7 @@ export default function BracketView({ rounds, teamName, seedMap, onPick }: Brack
   );
 }
 
-function TeamSlot({
+export function TeamSlot({
   teamId,
   isTop,
   winnerId,

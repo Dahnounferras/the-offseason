@@ -125,7 +125,7 @@ export default function StatsPage() {
       {/* Season Stats Tab */}
       {activeTab === "season" && (
         <div
-          className="rounded-xl overflow-hidden"
+          className="rounded-xl overflow-x-auto"
           style={{ border: "1px solid var(--border)" }}
         >
           <SeasonStatsTable
@@ -191,7 +191,7 @@ export default function StatsPage() {
 
               {selectedGame && (
                 <div
-                  className="rounded-xl overflow-hidden"
+                  className="rounded-xl overflow-x-auto"
                   style={{ border: "1px solid var(--border)" }}
                 >
                   {/* Game header row */}

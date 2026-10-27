@@ -35,7 +35,7 @@ export default function DashboardLayout({
     <ToastProvider>
       <div className="min-h-screen flex flex-col">
         <nav
-          className="flex items-center justify-between px-6 py-4 border-b"
+          className="flex items-center justify-between gap-3 px-4 sm:px-6 py-4 border-b"
           style={{ background: "var(--surface)", borderColor: "var(--border)" }}
         >
           <Link
@@ -47,7 +47,7 @@ export default function DashboardLayout({
             The Offseason
           </Link>
           <div className="flex items-center gap-4">
-            <span className="text-sm" style={{ color: "var(--muted)" }}>
+            <span className="hidden sm:inline text-sm" style={{ color: "var(--muted)" }}>
               {user.displayName}
             </span>
             <button
@@ -59,7 +59,7 @@ export default function DashboardLayout({
             </button>
           </div>
         </nav>
-        <main className="flex-1 p-6 max-w-5xl mx-auto w-full">{children}</main>
+        <main className="flex-1 p-4 sm:p-6 max-w-5xl mx-auto w-full">{children}</main>
       </div>
     </ToastProvider>
   );

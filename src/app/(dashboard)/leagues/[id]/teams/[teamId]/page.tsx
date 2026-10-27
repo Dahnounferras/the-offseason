@@ -84,7 +84,7 @@ export default function TeamDetailPage() {
 
       <h3 className="font-semibold mb-3">Roster & Stats</h3>
 
-      <div className="rounded-xl overflow-hidden" style={{ border: "1px solid var(--border)" }}>
+      <div className="rounded-xl overflow-x-auto border border-border">
         {players.length === 0 ? (
           <div className="py-12 text-center text-sm" style={{ color: "var(--muted)" }}>
             No players on this roster yet. Add one below.
