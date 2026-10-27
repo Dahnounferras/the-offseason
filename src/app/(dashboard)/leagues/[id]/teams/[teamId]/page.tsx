@@ -1,11 +1,10 @@
 "use client";
 
-import { useEffect, useState, useMemo } from "react";
+import { useState, useMemo } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import { getPlayers } from "@/lib/firestore/leagues";
 import type { Player } from "@/types";
-import { useLeague } from "@/hooks/useLeague";
+import { useLeague, useTeamPlayers } from "@/hooks/useLeague";
 import { computeStandings } from "@/lib/standings";
 import { getSportConfig } from "@/lib/sportConfig";
 import ConfirmModal from "@/components/ui/ConfirmModal";
@@ -17,18 +16,13 @@ import { useRoster } from "@/hooks/useRoster";
 export default function TeamDetailPage() {
   const { id, teamId } = useParams<{ id: string; teamId: string }>();
   const { league, teams, games } = useLeague();
-  const [players, setPlayers] = useState<Player[]>([]);
+  const [players, setPlayers] = useTeamPlayers(teamId);
   const [confirmDeletePlayer, setConfirmDeletePlayer] = useState<Player | null>(null);
   const roster = useRoster(id, teamId, players, setPlayers);
 
-  useEffect(() => {
-    getPlayers(id, teamId).then(setPlayers);
-  }, [id, teamId]);
-
   async function handleDeletePlayer() {
     if (!confirmDeletePlayer) return;
-    await roster.remove(confirmDeletePlayer);
-    setConfirmDeletePlayer(null);
+    if (await roster.remove(confirmDeletePlayer)) setConfirmDeletePlayer(null);
   }
 
   const team = teams.find((t) => t.id === teamId) ?? null;
@@ -67,17 +61,12 @@ export default function TeamDetailPage() {
   return (
     <div>
       <div className="mb-6">
-        <div className="text-sm mb-1" style={{ color: "var(--muted)" }}>
-          <Link href="/dashboard" className="hover:underline">My Leagues</Link>
-          {" / "}
-          <Link href={`/leagues/${id}`} className="hover:underline">{league.name}</Link>
-          {" / "}
-          <Link href={`/leagues/${id}/teams`} className="hover:underline">Teams</Link>
-          {` / ${team.name}`}
-        </div>
+        <Link href={`/leagues/${id}/teams`} className="text-sm text-muted hover:underline">
+          ← All teams
+        </Link>
         <div className="flex items-start justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold">{team.name}</h1>
+            <h2 className="text-xl font-bold mt-1">{team.name}</h2>
             {teamStanding && (
               <div className="flex items-center gap-3 mt-1 text-sm" style={{ color: "var(--muted)" }}>
                 <span style={{ color: "var(--win)" }}>{teamStanding.w}W</span>
@@ -90,19 +79,12 @@ export default function TeamDetailPage() {
               </div>
             )}
           </div>
-          <Link
-            href={`/leagues/${id}/teams`}
-            className="px-4 py-2 rounded-lg text-sm font-semibold shrink-0"
-            style={{ background: "var(--surface-2)", color: "var(--foreground)", border: "1px solid var(--border)" }}
-          >
-            ← All Teams
-          </Link>
         </div>
       </div>
 
-      <h2 className="font-semibold mb-3">Roster & Stats</h2>
+      <h3 className="font-semibold mb-3">Roster & Stats</h3>
 
-      <div className="rounded-xl overflow-hidden" style={{ border: "1px solid var(--border)" }}>
+      <div className="rounded-xl overflow-x-auto border border-border">
         {players.length === 0 ? (
           <div className="py-12 text-center text-sm" style={{ color: "var(--muted)" }}>
             No players on this roster yet. Add one below.
@@ -158,7 +140,8 @@ export default function TeamDetailPage() {
                         <span>{player.firstName} {player.lastName}</span>
                         <button
                           onClick={() => roster.startEdit(player)}
-                          className="cursor-pointer opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity px-2 py-0.5 rounded text-xs"
+                          aria-label={`Edit ${player.firstName} ${player.lastName}`}
+                          className="cursor-pointer opacity-60 group-hover:opacity-100 focus:opacity-100 transition-opacity px-2 py-0.5 rounded text-xs"
                           style={{ color: "var(--muted)", background: "var(--surface)" }}
                         >
                           Edit
@@ -181,6 +164,7 @@ export default function TeamDetailPage() {
                         className="cursor-pointer p-1.5 rounded-lg disabled:opacity-30 hover:opacity-70 transition-opacity"
                         style={{ color: "var(--loss)" }}
                         title="Remove player"
+                        aria-label={`Remove ${player.firstName} ${player.lastName}`}
                       >
                         <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                           <polyline points="3 6 5 6 21 6" />

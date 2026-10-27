@@ -24,6 +24,10 @@ export interface Player {
   teamId: string;
 }
 
+// Rosters keyed by team ID. A team with no entry has no players yet; entries for
+// deleted teams may linger, so always look players up through the current teams.
+export type PlayersByTeam = Record<string, Player[]>;
+
 export interface StatLine {
   playerId: string;
   stats: Record<string, number>;
@@ -40,6 +44,9 @@ export interface Game {
   homeSportsmanship?: number;
   awaySportsmanship?: number;
   playedAt?: number;
+  // Optional schedule details, set from the game page.
+  scheduledAt?: number;
+  location?: string;
   statLines: StatLine[];
 }
 

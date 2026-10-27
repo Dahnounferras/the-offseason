@@ -12,6 +12,9 @@ type StandingsTableProps = {
   dimmedTeamId?: string | null;
 };
 
+// PF, PA and RTG are hidden on phones so the table fits without scrolling.
+const EXTRA_COL = "hidden sm:table-cell px-2 sm:px-4 py-3";
+
 export default function StandingsTable({
   rows,
   leagueId,
@@ -27,21 +30,21 @@ export default function StandingsTable({
     <table className="w-full text-sm">
       <thead>
         <tr className="bg-surface-2">
-          <th className="text-left px-4 py-3">#</th>
-          <th className="text-left px-4 py-3">Team</th>
-          <th className="px-4 py-3 text-center">GP</th>
-          <th className="px-4 py-3 text-center text-win">W</th>
-          <th className="px-4 py-3 text-center text-loss">L</th>
-          <th className="px-4 py-3 text-center text-tie">T</th>
-          <th className="px-4 py-3 text-center font-bold text-accent">PTS</th>
+          <th className="text-left px-2 sm:px-4 py-3">#</th>
+          <th className="text-left px-2 sm:px-4 py-3">Team</th>
+          <th className="px-2 sm:px-4 py-3 text-center">GP</th>
+          <th className="px-2 sm:px-4 py-3 text-center text-win">W</th>
+          <th className="px-2 sm:px-4 py-3 text-center text-loss">L</th>
+          <th className="px-2 sm:px-4 py-3 text-center text-tie">T</th>
+          <th className="px-2 sm:px-4 py-3 text-center font-bold text-accent">PTS</th>
           {full && (
             <>
-              <th className="px-4 py-3 text-center">PF</th>
-              <th className="px-4 py-3 text-center">PA</th>
-              <th className="px-4 py-3 text-center">RTG</th>
+              <th className={`${EXTRA_COL} text-center`}>PF</th>
+              <th className={`${EXTRA_COL} text-center`}>PA</th>
+              <th className={`${EXTRA_COL} text-center`}>RTG</th>
             </>
           )}
-          {actions && <th className="px-4 py-3"></th>}
+          {actions && <th className="px-2 sm:px-4 py-3"></th>}
         </tr>
       </thead>
       <tbody>
@@ -55,28 +58,28 @@ export default function StandingsTable({
             key={row.team.id}
             className={`${i % 2 === 0 ? "bg-surface" : "bg-surface-2"} ${dimmedTeamId === row.team.id ? "opacity-40" : ""}`}
           >
-            <td className="px-4 py-3 text-muted">{i + 1}</td>
-            <td className="px-4 py-3 font-medium">
+            <td className="px-2 sm:px-4 py-3 text-muted">{i + 1}</td>
+            <td className="px-2 sm:px-4 py-3 font-medium">
               <Link href={`/leagues/${leagueId}/teams/${row.team.id}`} className="hover:underline text-foreground">
                 {row.team.name}
               </Link>
             </td>
-            <td className="px-4 py-3 text-center text-muted">{row.gp}</td>
-            <td className="px-4 py-3 text-center text-win">{row.w}</td>
-            <td className="px-4 py-3 text-center text-loss">{row.l}</td>
-            <td className="px-4 py-3 text-center text-tie">{row.t}</td>
-            <td className="px-4 py-3 text-center font-bold text-accent">{row.pts}</td>
+            <td className="px-2 sm:px-4 py-3 text-center text-muted">{row.gp}</td>
+            <td className="px-2 sm:px-4 py-3 text-center text-win">{row.w}</td>
+            <td className="px-2 sm:px-4 py-3 text-center text-loss">{row.l}</td>
+            <td className="px-2 sm:px-4 py-3 text-center text-tie">{row.t}</td>
+            <td className="px-2 sm:px-4 py-3 text-center font-bold text-accent">{row.pts}</td>
             {full && (
               <>
-                <td className="px-4 py-3 text-center text-muted">{row.pf}</td>
-                <td className="px-4 py-3 text-center text-muted">{row.pa}</td>
-                <td className="px-4 py-3 text-center text-muted">
+                <td className={`${EXTRA_COL} text-center text-muted`}>{row.pf}</td>
+                <td className={`${EXTRA_COL} text-center text-muted`}>{row.pa}</td>
+                <td className={`${EXTRA_COL} text-center text-muted`}>
                   {row.sportCount > 0 ? (row.sportSum / row.sportCount).toFixed(1) : "—"}
                 </td>
               </>
             )}
             {actions && (
-              <td className="px-4 py-3 text-right">
+              <td className="px-2 sm:px-4 py-3 text-right">
                 <div className="flex items-center justify-end gap-3">{actions(row)}</div>
               </td>
             )}

@@ -8,6 +8,8 @@ import { getUserLeagues, createLeague } from "@/lib/firestore/leagues";
 import Button from "@/components/ui/Button";
 import Input, { inputClasses } from "@/components/ui/Input";
 import Modal from "@/components/ui/Modal";
+import { useToast } from "@/components/ui/Toast";
+import { errorMessage } from "@/lib/errors";
 import type { League } from "@/types";
 
 const SPORTS = ["Basketball", "Soccer", "Softball", "Football", "Volleyball", "Hockey", "Other"];
@@ -19,25 +21,33 @@ export default function DashboardPage() {
   const [showCreate, setShowCreate] = useState(false);
   const [form, setForm] = useState({ name: "", sport: "Basketball", totalGames: 10, customSport: "" });
   const [saving, setSaving] = useState(false);
+  const toast = useToast();
 
   useEffect(() => {
     if (user) {
-      getUserLeagues(user.uid).then(setLeagues);
+      getUserLeagues(user.uid)
+        .then(setLeagues)
+        .catch((err) => toast.error(errorMessage(err)));
     }
-  }, [user]);
+  }, [user, toast]);
 
   async function handleCreate() {
     if (!user || !form.name.trim()) return;
     setSaving(true);
-    const id = await createLeague({
-      name: form.name.trim(),
-      sport: form.sport === "Other" ? form.customSport.trim() || "Other" : form.sport,
-      ownerId: user.uid,
-      season: { totalGames: form.totalGames },
-      scoringRules: { win: 2, tie: 1, loss: 0 },
-      isPublic: false,
-    });
-    router.push(`/leagues/${id}`);
+    try {
+      const id = await createLeague({
+        name: form.name.trim(),
+        sport: form.sport === "Other" ? form.customSport.trim() || "Other" : form.sport,
+        ownerId: user.uid,
+        season: { totalGames: form.totalGames },
+        scoringRules: { win: 2, tie: 1, loss: 0 },
+        isPublic: false,
+      });
+      router.push(`/leagues/${id}`);
+    } catch (err) {
+      toast.error(errorMessage(err));
+      setSaving(false);
+    }
   }
 
   const activeLeagues = leagues.filter((l) => !l.status || l.status === "active");
@@ -142,12 +152,12 @@ export default function DashboardPage() {
       )}
 
       {showCreate && (
-        <Modal size="md" onClose={() => setShowCreate(false)}>
-          <h2 className="text-lg font-bold mb-4">Create a League</h2>
+        <Modal size="md" title="Create a League" onClose={() => setShowCreate(false)}>
           <div className="space-y-4">
             <div>
-              <label className="block text-sm font-medium mb-1">League Name</label>
+              <label htmlFor="league-name" className="block text-sm font-medium mb-1">League Name</label>
               <Input
+                id="league-name"
                 type="text"
                 value={form.name}
                 onChange={(e) => setForm({ ...form, name: e.target.value })}
@@ -156,8 +166,9 @@ export default function DashboardPage() {
               />
             </div>
             <div>
-              <label className="block text-sm font-medium mb-1">Sport</label>
+              <label htmlFor="league-sport" className="block text-sm font-medium mb-1">Sport</label>
               <select
+                id="league-sport"
                 value={form.sport}
                 onChange={(e) => setForm({ ...form, sport: e.target.value })}
                 className={`${inputClasses()} w-full`}
@@ -167,8 +178,9 @@ export default function DashboardPage() {
             </div>
             {form.sport === "Other" && (
               <div>
-                <label className="block text-sm font-medium mb-1">Sport name</label>
+                <label htmlFor="league-custom-sport" className="block text-sm font-medium mb-1">Sport name</label>
                 <Input
+                  id="league-custom-sport"
                   type="text"
                   value={form.customSport}
                   onChange={(e) => setForm({ ...form, customSport: e.target.value })}
@@ -178,8 +190,9 @@ export default function DashboardPage() {
               </div>
             )}
             <div>
-              <label className="block text-sm font-medium mb-1">Season Length (games)</label>
+              <label htmlFor="league-season-length" className="block text-sm font-medium mb-1">Season Length (games)</label>
               <Input
+                id="league-season-length"
                 type="number"
                 min={1}
                 max={100}

@@ -6,7 +6,7 @@ import {
 import {
   getLeague, getUserLeagues, createLeague, getGames,
   addTeam, deleteTeam, scheduleGames,
-  recordResult, updateResult, updatePlayer,
+  recordResult, updateResult, updatePlayer, updateGameDetails,
   endLeague, reactivateLeague, deleteLeague, resetLeague,
   getBracket, saveBracket, deleteBracket, updateBracket,
 } from "@/lib/firestore/leagues";
@@ -18,7 +18,10 @@ vi.mock("firebase/firestore", () => ({
   addDoc: vi.fn(),
   updateDoc: vi.fn(),
   deleteDoc: vi.fn(),
-  doc: vi.fn((_, ...segs) => ({ path: segs.join("/") })),
+  // doc(collectionRef) with no path makes a new auto-ID ref.
+  doc: vi.fn((parent, ...segs) =>
+    segs.length ? { path: segs.join("/") } : { id: `auto-${++autoId}`, path: `${parent.path}/auto-${autoId}` }
+  ),
   collection: vi.fn((_, ...segs) => ({ path: segs.join("/") })),
   query: vi.fn((...args) => args[0]),
   where: vi.fn((...args) => args),
@@ -28,14 +31,22 @@ vi.mock("firebase/firestore", () => ({
 
 vi.mock("@/lib/firebase", () => ({ db: {}, auth: {} }));
 
-type MockBatch = { delete: ReturnType<typeof vi.fn>; update: ReturnType<typeof vi.fn>; commit: ReturnType<typeof vi.fn> };
+let autoId = 0;
+
+type MockBatch = {
+  delete: ReturnType<typeof vi.fn>;
+  update: ReturnType<typeof vi.fn>;
+  set: ReturnType<typeof vi.fn>;
+  commit: ReturnType<typeof vi.fn>;
+};
 let batches: MockBatch[] = [];
 
 beforeEach(() => {
   vi.clearAllMocks();
   batches = [];
+  autoId = 0;
   vi.mocked(writeBatch).mockImplementation(() => {
-    const b = { delete: vi.fn(), update: vi.fn(), commit: vi.fn().mockResolvedValue(undefined) };
+    const b = { delete: vi.fn(), update: vi.fn(), set: vi.fn(), commit: vi.fn().mockResolvedValue(undefined) };
     batches.push(b);
     return b as never;
   });
@@ -140,26 +151,54 @@ describe("addTeam", () => {
 });
 
 describe("scheduleGames", () => {
-  it("calls addDoc once per matchup", async () => {
-    vi.mocked(addDoc).mockResolvedValue({ id: "g" } as never);
-    const matchups = [
-      { homeTeamId: "A", awayTeamId: "B", gameNumber: 1 },
-      { homeTeamId: "C", awayTeamId: "D", gameNumber: 2 },
-    ];
-    await scheduleGames("league-1", matchups);
-    expect(addDoc).toHaveBeenCalledTimes(2);
+  const matchups = [
+    { homeTeamId: "A", awayTeamId: "B", gameNumber: 1 },
+    { homeTeamId: "C", awayTeamId: "D", gameNumber: 2 },
+  ];
+
+  it("writes every game in one batch and returns them with their new ids", async () => {
+    const games = await scheduleGames("league-1", matchups);
+    expect(batches).toHaveLength(1);
+    expect(batches[0].set).toHaveBeenCalledTimes(2);
+    expect(batches[0].commit).toHaveBeenCalledOnce();
+    expect(games.map((g) => g.id)).toEqual(["auto-1", "auto-2"]);
+    expect(games[1]).toMatchObject({ homeTeamId: "C", awayTeamId: "D", gameNumber: 2 });
   });
 
   it("includes status: scheduled and statLines: [] in each game", async () => {
-    vi.mocked(addDoc).mockResolvedValue({ id: "g" } as never);
-    await scheduleGames("league-1", [{ homeTeamId: "A", awayTeamId: "B", gameNumber: 1 }]);
-    const payload = vi.mocked(addDoc).mock.calls[0][1] as unknown as Record<string, unknown>;
+    await scheduleGames("league-1", matchups.slice(0, 1));
+    const [ref, payload] = batches[0].set.mock.calls[0];
+    expect(ref.path).toBe("leagues/league-1/games/auto-1");
     expect(payload.status).toBe("scheduled");
     expect(payload.statLines).toEqual([]);
   });
 });
 
+describe("updateGameDetails", () => {
+  it("writes the date and location", async () => {
+    vi.mocked(updateDoc).mockResolvedValueOnce(undefined);
+    await updateGameDetails("l1", "g1", { scheduledAt: 1000, location: "Court 2" });
+    expect(updateDoc).toHaveBeenCalledWith({ path: "leagues/l1/games/g1" }, { scheduledAt: 1000, location: "Court 2" });
+  });
+
+  it("clears missing fields with deleteField", async () => {
+    vi.mocked(updateDoc).mockResolvedValueOnce(undefined);
+    await updateGameDetails("l1", "g1", {});
+    expect(updateDoc).toHaveBeenCalledWith(
+      { path: "leagues/l1/games/g1" },
+      { scheduledAt: { _type: "deleteField" }, location: { _type: "deleteField" } }
+    );
+  });
+});
+
 describe("recordResult", () => {
+  it("returns the playedAt it wrote", async () => {
+    vi.mocked(updateDoc).mockResolvedValueOnce(undefined);
+    const playedAt = await recordResult("l1", "g1", 3, 1);
+    const payload = vi.mocked(updateDoc).mock.calls[0][1] as unknown as Record<string, unknown>;
+    expect(payload.playedAt).toBe(playedAt);
+  });
+
   it("includes status: played and playedAt as a number", async () => {
     vi.mocked(updateDoc).mockResolvedValueOnce(undefined);
     await recordResult("l1", "g1", 3, 1);

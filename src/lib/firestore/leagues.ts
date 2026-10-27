@@ -98,21 +98,21 @@ export async function getGames(leagueId: string): Promise<Game[]> {
   });
 }
 
+// Returns the created games so the caller can show them without re-fetching.
 export async function scheduleGames(
   leagueId: string,
   matchups: { homeTeamId: string; awayTeamId: string; gameNumber: number }[]
-): Promise<void> {
-  await Promise.all(
-    matchups.map((m) =>
-      addDoc(collection(db, "leagues", leagueId, "games"), {
-        ...m,
-        status: "scheduled",
-        statLines: [],
-      })
-    )
-  );
+): Promise<Game[]> {
+  const games = collection(db, "leagues", leagueId, "games");
+  const created = matchups.map((m) => ({
+    ref: doc(games),
+    data: { ...m, status: "scheduled" as const, statLines: [] },
+  }));
+  await commitInChunks(created.map(({ ref, data }) => (b: WriteBatch) => b.set(ref, data)));
+  return created.map(({ ref, data }) => ({ id: ref.id, ...data }));
 }
 
+// Returns the playedAt timestamp it wrote, so the caller can patch local state to match.
 export async function recordResult(
   leagueId: string,
   gameId: string,
@@ -120,11 +120,13 @@ export async function recordResult(
   awayScore: number,
   homeSportsmanship?: number,
   awaySportsmanship?: number
-): Promise<void> {
-  const data: Record<string, unknown> = { homeScore, awayScore, status: "played", playedAt: Date.now() };
+): Promise<number> {
+  const playedAt = Date.now();
+  const data: Record<string, unknown> = { homeScore, awayScore, status: "played", playedAt };
   if (homeSportsmanship !== undefined) data.homeSportsmanship = homeSportsmanship;
   if (awaySportsmanship !== undefined) data.awaySportsmanship = awaySportsmanship;
   await updateDoc(doc(db, "leagues", leagueId, "games", gameId), data);
+  return playedAt;
 }
 
 export async function updateResult(
@@ -139,6 +141,18 @@ export async function updateResult(
   if (homeSportsmanship !== undefined) data.homeSportsmanship = homeSportsmanship;
   if (awaySportsmanship !== undefined) data.awaySportsmanship = awaySportsmanship;
   await updateDoc(doc(db, "leagues", leagueId, "games", gameId), data);
+}
+
+// Sets or clears the optional date and location. undefined clears a field.
+export async function updateGameDetails(
+  leagueId: string,
+  gameId: string,
+  details: Pick<Game, "scheduledAt" | "location">
+): Promise<void> {
+  await updateDoc(doc(db, "leagues", leagueId, "games", gameId), {
+    scheduledAt: details.scheduledAt ?? deleteField(),
+    location: details.location ?? deleteField(),
+  });
 }
 
 export async function getPlayers(leagueId: string, teamId: string): Promise<Player[]> {

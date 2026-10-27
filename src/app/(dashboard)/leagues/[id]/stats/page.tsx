@@ -1,11 +1,13 @@
 "use client";
 
-import { useEffect, useState, useMemo } from "react";
+import { useState, useMemo } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import { getPlayers, saveGameStatLines } from "@/lib/firestore/leagues";
+import { saveGameStatLines } from "@/lib/firestore/leagues";
 import type { Game, Player } from "@/types";
 import { useLeague } from "@/hooks/useLeague";
+import { useToast } from "@/components/ui/Toast";
+import { errorMessage } from "@/lib/errors";
 import { getSportConfig } from "@/lib/sportConfig";
 import Spinner from "@/components/Spinner";
 import { computeSeasonTotals, buildStatDraft, draftToStatLines, type StatDraft } from "@/lib/stats";
@@ -16,27 +18,23 @@ type PlayerInfo = { player: Player; teamName: string };
 
 export default function StatsPage() {
   const { id } = useParams<{ id: string }>();
-  const { league, teams, games, setGames } = useLeague();
-  const [playerMap, setPlayerMap] = useState<Map<string, PlayerInfo>>(new Map());
+  const { league, teams, games, players, setGames } = useLeague();
+  const toast = useToast();
   const [activeTab, setActiveTab] = useState<"season" | "game">("season");
   const [selectedGameId, setSelectedGameId] = useState<string | null>(null);
   const [editingStats, setEditingStats] = useState(false);
   const [draftStats, setDraftStats] = useState<StatDraft>({});
   const [savingStats, setSavingStats] = useState(false);
 
-  useEffect(() => {
-    Promise.all(
-      teams.map((team) => getPlayers(id, team.id).then((ps) => ({ team, players: ps })))
-    ).then((allPlayers) => {
-      const map = new Map<string, PlayerInfo>();
-      for (const { team, players } of allPlayers) {
-        for (const player of players) {
-          map.set(player.id, { player, teamName: team.name });
-        }
+  const playerMap = useMemo(() => {
+    const map = new Map<string, PlayerInfo>();
+    for (const team of teams) {
+      for (const player of players[team.id] ?? []) {
+        map.set(player.id, { player, teamName: team.name });
       }
-      setPlayerMap(map);
-    });
-  }, [id, teams]);
+    }
+    return map;
+  }, [teams, players]);
 
   const sportConfig = useMemo(
     () => getSportConfig(league.sport),
@@ -90,6 +88,8 @@ export default function StatsPage() {
         prev.map((g) => (g.id === selectedGame.id ? { ...g, statLines } : g))
       );
       setEditingStats(false);
+    } catch (err) {
+      toast.error(errorMessage(err));
     } finally {
       setSavingStats(false);
     }
@@ -99,33 +99,7 @@ export default function StatsPage() {
 
   return (
     <div>
-      {/* Header */}
-      <div className="mb-6">
-        <div className="text-sm mb-1" style={{ color: "var(--muted)" }}>
-          <Link href="/dashboard" className="hover:underline">
-            My Leagues
-          </Link>
-          {" / "}
-          <Link href={`/leagues/${id}`} className="hover:underline">
-            {league.name}
-          </Link>
-          {" / Stats"}
-        </div>
-        <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-bold">Player Stats</h1>
-          <Link
-            href={`/leagues/${id}`}
-            className="px-4 py-2 rounded-lg text-sm font-semibold"
-            style={{
-              background: "var(--surface-2)",
-              color: "var(--foreground)",
-              border: "1px solid var(--border)",
-            }}
-          >
-            ← Back to League
-          </Link>
-        </div>
-      </div>
+      <h2 className="text-lg font-semibold mb-4">Player Stats</h2>
 
       {/* Tabs */}
       <div
@@ -151,7 +125,7 @@ export default function StatsPage() {
       {/* Season Stats Tab */}
       {activeTab === "season" && (
         <div
-          className="rounded-xl overflow-hidden"
+          className="rounded-xl overflow-x-auto"
           style={{ border: "1px solid var(--border)" }}
         >
           <SeasonStatsTable
@@ -217,7 +191,7 @@ export default function StatsPage() {
 
               {selectedGame && (
                 <div
-                  className="rounded-xl overflow-hidden"
+                  className="rounded-xl overflow-x-auto"
                   style={{ border: "1px solid var(--border)" }}
                 >
                   {/* Game header row */}

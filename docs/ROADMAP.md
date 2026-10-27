@@ -9,11 +9,13 @@ Living plan from the October 2026 repo review. Update it as items land.
 | 1 | Commit WIP (spinners, reset league) | ✅ Done (`4d90863`) |
 | 2 | Seeding bug, Firestore security rules, reset/delete cleanup | ✅ Done |
 | 3 | Dead code + tooling cleanup, CI | ✅ Done |
-| 4 | Extract shared components + league data hook | ✅ Done (branch `step-4-refactor`) |
-| 5 | UX pass (tab bar, toasts, mobile) | ⏳ Next |
-| 6 | Public league pages | |
+| 4 | Extract shared components + league data hook | ✅ Done (merged in #2) |
+| 5 | UX pass (tab bar, toasts, mobile) | ✅ Done (branch `step-5-ux`, browser check pending) |
+| 6 | Public league pages | ⏳ Next |
 
 Step 4 removed most of the duplicated UI, so a UX change in step 5 now usually means editing one shared component.
+
+Step 5 added the Settings tab, which is where step 6's `isPublic` toggle goes.
 
 ## Step 2: what changed
 
@@ -94,9 +96,9 @@ Done in six commits on `step-4-refactor`. Each one passes lint, typecheck, tests
   - Record a score on a game page, then check the Games and Stats tabs.
   - Press Escape on each modal.
   - Open `/leagues/does-not-exist` and confirm the "No access" screen.
-- **Merge order.** `step-4-refactor` is branched from `step-3-cleanup`, which isn't on `main` yet. Merge step 3 first.
-- **Failed writes are silent.** Spinners now reset, but the user still sees no message, and the console shows an unhandled rejection. The step 5 toasts should catch these.
-- **Players aren't in the shared state.** The stats page loads every roster, and the team and game pages load their own. A roster edit on one tab is only seen on another tab after it re-mounts. Move players into the provider if this becomes noticeable.
+- ~~**Merge order.**~~ Done: steps 3 and 4 are on `main`.
+- ~~**Failed writes are silent.**~~ Done in step 5 (toasts).
+- ~~**Players aren't in the shared state.**~~ Done in step 5.
 - **Left as is:** the overview header buttons and row-2 actions. Step 5 replaces them with a tab bar and a settings menu.
 
 ## Step 4: original plan
@@ -122,7 +124,72 @@ The pages are 400–900-line client components that duplicate each other.
 - The league page shows "Loading…" forever when the league is missing or permission is denied.
 - Add an error state and toasts, and a not-found / no-access screen.
 
-## Step 5: ease of use
+## Step 5: what changed
+
+Done in seven commits on `step-5-ux`. Each one passes lint, typecheck, tests and build.
+
+- **Toasts and errors.**
+  - `ToastProvider` and `useToast()` (`src/components/ui/Toast.tsx`) are mounted in the dashboard layout.
+  - `errorMessage()` (`src/lib/errors.ts`) turns Firestore codes into readable text.
+  - Every write handler catches failures and shows an error toast. This includes the dashboard's create league, which used to leave its spinner stuck.
+  - Success toasts appear only where the result isn't visible: settings saved, league reset, and quick score.
+- **Fewer re-fetches.**
+  - Adding a team appends it locally.
+  - `scheduleGames` writes in batches and returns the created games.
+  - `recordResult` returns its `playedAt`.
+  - Bracket picks are optimistic and roll back on failure.
+- **League header and tab bar.**
+  - `LeagueHeader` renders once in `leagues/[id]/layout.tsx`. It shows the breadcrumb, name, sport, games played and the ended badge, plus tabs: Overview · Games · Stats · Teams · Bracket · Settings. The active tab comes from `useSelectedLayoutSegment()`.
+  - Tab pages no longer have their own breadcrumbs or Back buttons. The game and team detail pages keep a small "← All games/teams" link.
+  - The overview's three hover-tooltip "Generate Tournament Bracket" buttons are gone. The bracket page shows the reason as visible text (`bracketBlockedReason`), and both screens now require 3 teams.
+- **Settings tab** (`/leagues/[id]/settings`).
+  - You can edit the league name, the points for a win, tie and loss, and the season length (`validateSettings` in `src/lib/leagueSettings.ts`).
+  - Season length locks once a schedule exists.
+  - End Season, Reactivate, Reset and Delete moved here from the overview, into a danger zone.
+- **Players in the shared state.**
+  - `LeagueProvider` loads every roster once (`players`, keyed by team ID).
+  - `useTeamPlayers(teamId)` feeds `useRoster`, so roster edits show on the stats, team and game pages without a reload. This resolves the step 4 follow-up.
+- **Setup checklist** on the overview (`src/lib/setup.ts`, `SetupChecklist`).
+  - The steps are: add teams, add players (optional), start the season, record a result, generate the bracket.
+  - Start League lives in the checklist.
+  - Hide is remembered per league in `localStorage`.
+- **Games.**
+  - Each upcoming game has a Score button for quick, inline score entry.
+  - Games have optional `scheduledAt` and `location` fields. They're edited on the game page (`updateGameDetails`) and shown in the list.
+  - Scores must now be whole numbers, 0 or more (`parseScoreInput`).
+  - After the season ends, the game page no longer shows the score form for an unplayed game.
+- **Mobile.**
+  - `StandingsTable` hides PF, PA and RTG below `sm`.
+  - The bracket renders as a stacked per-round list (`BracketList`) below `md` and as the tree from `md` up (`ResponsiveBracket`).
+  - Score inputs stack on phones, wide tables scroll inside their card, and the gutters are smaller.
+- **Accessibility.**
+  - `Modal` focuses its first control, traps Tab, returns focus to the opener on close, and closes on a backdrop press.
+  - The create-league labels are linked to their inputs.
+  - The roster Edit buttons are always visible. They used to appear only on hover, which touch screens can't do.
+  - Icon buttons name the player they act on.
+  - **Logo alt text was left as `alt=""` on purpose.** Each logo sits inside a link right next to the visible text "The Offseason", so a non-empty alt would make screen readers say the name twice.
+- **Tests:** 151 → 214.
+
+### Follow-ups from step 5
+
+- **Browser check (not done yet).** Signing in needs a real Google account, so only `/`, `/login`, `/dashboard` and the league routes were checked, and all returned 200 on the dev server. With `npm run dev`, signed in, at desktop width and at about 375px, run the step 3 and step 4 checks above, plus:
+  - Create a league. The checklist appears. Add 2 teams and a player, then start the season from the checklist; the games appear without a reload.
+  - Click every tab. The active tab is highlighted and nothing is duplicated.
+  - Quick-score a game. A toast appears, and the standings, stats, team page and "games played" count agree.
+  - Set a date and location on a game page, and check that they show in the games list.
+  - Settings:
+    - Change the scoring to 3/1/0. The standings update.
+    - Season length is locked.
+    - Reset unlocks season length.
+    - End, Reactivate and Delete all work.
+  - At 375px the bracket is a stacked list, and advancing a team still works.
+  - With the network offline, add a team. An error toast appears and the spinner resets.
+  - In each modal, Tab stays inside, Escape closes it, and focus returns to the opener.
+- **Game times are stored in the browser's time zone.** The value is epoch ms, so everyone sees the right local time, but a league that spans time zones has no "league time zone". Revisit with step 6 scheduling.
+- **Sportsmanship can't be cleared.** Picking "—" on an edit clears it on screen, but `updateResult` skips undefined values, so the old rating stays in Firestore and comes back on reload. This predates step 5. The fix is `deleteField()`, as in `updateGameDetails`.
+- **Still open from step 2:** deploy the rules, add a rules test, decide hard vs soft league delete, and handle deleting a team that's in a bracket.
+
+## Step 5: ease of use (original plan)
 
 - Persistent tab bar across league pages (Overview · Games · Stats · Teams · Bracket) instead of header buttons.
 - Move End Season, Reset and Delete into a "⋯ Settings" menu or a league settings page, away from the main actions.

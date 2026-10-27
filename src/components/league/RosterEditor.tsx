@@ -1,11 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { getPlayers } from "@/lib/firestore/leagues";
 import { useRoster } from "@/hooks/useRoster";
+import { useTeamPlayers } from "@/hooks/useLeague";
 import PlayerForm from "@/components/league/PlayerForm";
 import { JerseyBadge } from "@/components/league/statCells";
-import type { Player, Team } from "@/types";
+import type { Team } from "@/types";
 
 type RosterEditorProps = {
   leagueId: string;
@@ -16,12 +15,8 @@ type RosterEditorProps = {
 // Roster list with inline edit and an add form, for the overview's roster modal.
 // Render with key={team.id} so switching teams starts from a clean state.
 export default function RosterEditor({ leagueId, team, onClose }: RosterEditorProps) {
-  const [players, setPlayers] = useState<Player[]>([]);
+  const [players, setPlayers] = useTeamPlayers(team.id);
   const roster = useRoster(leagueId, team.id, players, setPlayers);
-
-  useEffect(() => {
-    getPlayers(leagueId, team.id).then(setPlayers);
-  }, [leagueId, team.id]);
 
   return (
     <>
@@ -72,7 +67,8 @@ export default function RosterEditor({ leagueId, team, onClose }: RosterEditorPr
                   </span>
                   <button
                     onClick={() => roster.startEdit(p)}
-                    className="cursor-pointer opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity px-2 py-1 rounded text-xs text-muted bg-surface"
+                    aria-label={`Edit ${p.firstName} ${p.lastName}`}
+                    className="cursor-pointer opacity-60 group-hover:opacity-100 focus:opacity-100 transition-opacity px-2 py-1 rounded text-xs text-muted bg-surface"
                   >
                     Edit
                   </button>

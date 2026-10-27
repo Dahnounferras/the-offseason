@@ -10,6 +10,8 @@ import {
   playerToForm,
   type PlayerFormValues,
 } from "@/lib/roster";
+import { useToast } from "@/components/ui/Toast";
+import { errorMessage } from "@/lib/errors";
 import type { Player } from "@/types";
 
 // Add / edit / remove for one team's roster. The caller owns the players list so it can
@@ -30,6 +32,7 @@ export function useRoster(
   const [saving, setSaving] = useState(false);
 
   const [removingId, setRemovingId] = useState<string | null>(null);
+  const toast = useToast();
 
   // Typing clears a stale validation error.
   function setAddForm(form: PlayerFormValues) {
@@ -52,6 +55,8 @@ export function useRoster(
       const playerId = await addPlayer(leagueId, teamId, data);
       setPlayers((prev) => [...prev, { id: playerId, ...data }]);
       setAddFormState(EMPTY_PLAYER_FORM);
+    } catch (err) {
+      toast.error(errorMessage(err));
     } finally {
       setAdding(false);
     }
@@ -86,16 +91,23 @@ export function useRoster(
         })
       );
       setEditing(null);
+    } catch (err) {
+      toast.error(errorMessage(err));
     } finally {
       setSaving(false);
     }
   }
 
-  async function remove(player: Player) {
+  // Resolves to whether the player was removed, so a confirm modal can stay open on failure.
+  async function remove(player: Player): Promise<boolean> {
     setRemovingId(player.id);
     try {
       await deletePlayer(leagueId, teamId, player.id);
       setPlayers((prev) => prev.filter((p) => p.id !== player.id));
+      return true;
+    } catch (err) {
+      toast.error(errorMessage(err));
+      return false;
     } finally {
       setRemovingId(null);
     }

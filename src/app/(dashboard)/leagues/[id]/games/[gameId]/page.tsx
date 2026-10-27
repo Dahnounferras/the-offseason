@@ -1,48 +1,48 @@
 "use client";
 
-import { useEffect, useState, useMemo } from "react";
+import { useState, useMemo } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import {
-  getPlayers,
   recordResult,
   updateResult,
   saveGameStatLines,
+  updateGameDetails,
 } from "@/lib/firestore/leagues";
-import type { Game, Player } from "@/types";
+import type { Game } from "@/types";
 import { useLeague } from "@/hooks/useLeague";
+import { useToast } from "@/components/ui/Toast";
+import { errorMessage } from "@/lib/errors";
 import { getSportConfig } from "@/lib/sportConfig";
-import Spinner from "@/components/Spinner";
 import { buildStatDraft, draftToStatLines, type StatDraft } from "@/lib/stats";
+import { parseScoreInput, toDateTimeLocal, fromDateTimeLocal, formatGameWhen } from "@/lib/games";
 import StatGrid from "@/components/league/StatGrid";
 import { sortByJersey } from "@/lib/roster";
+import Button from "@/components/ui/Button";
+import Input, { inputClasses } from "@/components/ui/Input";
 
 export default function GameDetailPage() {
   const { id, gameId } = useParams<{ id: string; gameId: string }>();
-  const { league, teams, games, setGames } = useLeague();
+  const { league, teams, games, players, setGames } = useLeague();
+  const toast = useToast();
   const game = games.find((g) => g.id === gameId) ?? null;
-  const homeTeamId = game?.homeTeamId;
-  const awayTeamId = game?.awayTeamId;
-  const [homePlayers, setHomePlayers] = useState<Player[]>([]);
-  const [awayPlayers, setAwayPlayers] = useState<Player[]>([]);
+  const homePlayers = useMemo(() => (game ? sortByJersey(players[game.homeTeamId] ?? []) : []), [players, game]);
+  const awayPlayers = useMemo(() => (game ? sortByJersey(players[game.awayTeamId] ?? []) : []), [players, game]);
 
   // Score state
   const [editingScore, setEditingScore] = useState(false);
   const [scoreForm, setScoreForm] = useState({ homeScore: "", awayScore: "", homeSport: "", awaySport: "" });
   const [savingScore, setSavingScore] = useState(false);
 
+  // Date & location state
+  const [editingDetails, setEditingDetails] = useState(false);
+  const [detailsForm, setDetailsForm] = useState({ when: "", location: "" });
+  const [savingDetails, setSavingDetails] = useState(false);
+
   // Stats state
   const [editingStats, setEditingStats] = useState(false);
   const [draftStats, setDraftStats] = useState<StatDraft>({});
   const [savingStats, setSavingStats] = useState(false);
-
-  useEffect(() => {
-    if (!homeTeamId || !awayTeamId) return;
-    Promise.all([getPlayers(id, homeTeamId), getPlayers(id, awayTeamId)]).then(([hp, ap]) => {
-      setHomePlayers(sortByJersey(hp));
-      setAwayPlayers(sortByJersey(ap));
-    });
-  }, [id, homeTeamId, awayTeamId]);
 
   // Writes land in the shared games list so the games, stats and standings tabs see them too.
   function patchGame(patch: Partial<Game>) {
@@ -63,11 +63,12 @@ export default function GameDetailPage() {
     setEditingScore(true);
   }
 
-  async function handleSaveScore() {
-    if (!game) return;
-    const hs = Number(scoreForm.homeScore);
-    const as = Number(scoreForm.awayScore);
-    if (scoreForm.homeScore === "" || scoreForm.awayScore === "" || isNaN(hs) || isNaN(as)) return;
+  const parsedScore = parseScoreInput(scoreForm.homeScore, scoreForm.awayScore);
+
+  async function handleSaveScore(e: React.FormEvent) {
+    e.preventDefault();
+    if (!game || !parsedScore) return;
+    const { home: hs, away: as } = parsedScore;
     const homeSport = scoreForm.homeSport ? Number(scoreForm.homeSport) : undefined;
     const awaySport = scoreForm.awaySport ? Number(scoreForm.awaySport) : undefined;
     setSavingScore(true);
@@ -76,12 +77,39 @@ export default function GameDetailPage() {
         await updateResult(id, game.id, hs, as, homeSport, awaySport);
         patchGame({ homeScore: hs, awayScore: as, homeSportsmanship: homeSport, awaySportsmanship: awaySport });
       } else {
-        await recordResult(id, game.id, hs, as, homeSport, awaySport);
-        patchGame({ status: "played", homeScore: hs, awayScore: as, homeSportsmanship: homeSport, awaySportsmanship: awaySport, playedAt: Date.now() });
+        const playedAt = await recordResult(id, game.id, hs, as, homeSport, awaySport);
+        patchGame({ status: "played", homeScore: hs, awayScore: as, homeSportsmanship: homeSport, awaySportsmanship: awaySport, playedAt });
       }
       setEditingScore(false);
+    } catch (err) {
+      toast.error(errorMessage(err));
     } finally {
       setSavingScore(false);
+    }
+  }
+
+  function openEditDetails() {
+    if (!game) return;
+    setDetailsForm({ when: toDateTimeLocal(game.scheduledAt), location: game.location ?? "" });
+    setEditingDetails(true);
+  }
+
+  async function handleSaveDetails(e: React.FormEvent) {
+    e.preventDefault();
+    if (!game) return;
+    const details = {
+      scheduledAt: fromDateTimeLocal(detailsForm.when),
+      location: detailsForm.location.trim() || undefined,
+    };
+    setSavingDetails(true);
+    try {
+      await updateGameDetails(id, game.id, details);
+      patchGame(details);
+      setEditingDetails(false);
+    } catch (err) {
+      toast.error(errorMessage(err));
+    } finally {
+      setSavingDetails(false);
     }
   }
 
@@ -107,6 +135,8 @@ export default function GameDetailPage() {
       await saveGameStatLines(id, game.id, statLines);
       patchGame({ statLines });
       setEditingStats(false);
+    } catch (err) {
+      toast.error(errorMessage(err));
     } finally {
       setSavingStats(false);
     }
@@ -125,209 +155,206 @@ export default function GameDetailPage() {
   }
 
   const gameLabel = game.gameNumber ? `Game ${game.gameNumber}` : "Game";
+  const homeName = teamName(game.homeTeamId);
+  const awayName = teamName(game.awayTeamId);
 
   return (
     <div>
-      {/* Header */}
-      <div className="mb-8">
-        <div className="text-sm mb-1" style={{ color: "var(--muted)" }}>
-          <Link href="/dashboard" className="hover:underline">My Leagues</Link>
-          {" / "}
-          <Link href={`/leagues/${id}`} className="hover:underline">{league.name}</Link>
-          {" / "}
-          <Link href={`/leagues/${id}/games`} className="hover:underline">Games</Link>
-          {` / ${gameLabel}`}
-        </div>
-        <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-bold">{gameLabel}</h1>
-          <Link
-            href={`/leagues/${id}/games`}
-            className="px-4 py-2 rounded-lg text-sm font-semibold"
-            style={{ background: "var(--surface-2)", color: "var(--foreground)", border: "1px solid var(--border)" }}
-          >
-            ← Back to Games
-          </Link>
-        </div>
+      <div className="mb-6">
+        <Link href={`/leagues/${id}/games`} className="text-sm text-muted hover:underline">
+          ← All games
+        </Link>
+        <h2 className="text-xl font-bold mt-1">{gameLabel}</h2>
       </div>
 
       {/* Score section */}
-      <div
-        className="rounded-xl p-6 mb-8"
-        style={{ background: "var(--surface)", border: "1px solid var(--border)" }}
-      >
-        {/* Score display */}
+      <div className="rounded-xl p-4 sm:p-6 mb-4 bg-surface border border-border">
         {isPlayed && !editingScore ? (
           <div className="flex flex-col items-center gap-4">
-            <div className="flex items-center gap-8">
-              <span className="text-lg font-semibold">{teamName(game.homeTeamId)}</span>
-              <span className="text-4xl font-bold tabular-nums" style={{ color: "var(--accent)" }}>
+            <div className="flex flex-col sm:flex-row items-center gap-2 sm:gap-8 text-center">
+              <span className="text-lg font-semibold">{homeName}</span>
+              <span className="text-4xl font-bold tabular-nums text-accent">
                 {game.homeScore} – {game.awayScore}
               </span>
-              <span className="text-lg font-semibold">{teamName(game.awayTeamId)}</span>
+              <span className="text-lg font-semibold">{awayName}</span>
             </div>
             {(game.homeSportsmanship || game.awaySportsmanship) && (
-              <div className="flex gap-6 text-xs" style={{ color: "var(--muted)" }}>
-                {game.homeSportsmanship && <span>Sportsmanship {teamName(game.homeTeamId)}: {game.homeSportsmanship}/5</span>}
-                {game.awaySportsmanship && <span>Sportsmanship {teamName(game.awayTeamId)}: {game.awaySportsmanship}/5</span>}
+              <div className="flex flex-wrap justify-center gap-x-6 gap-y-1 text-xs text-muted">
+                {game.homeSportsmanship && <span>Sportsmanship {homeName}: {game.homeSportsmanship}/5</span>}
+                {game.awaySportsmanship && <span>Sportsmanship {awayName}: {game.awaySportsmanship}/5</span>}
               </div>
             )}
             {game.playedAt && (
-              <p className="text-xs" style={{ color: "var(--muted)" }}>
+              <p className="text-xs text-muted">
                 Played {new Date(game.playedAt).toLocaleDateString()}
               </p>
             )}
             {!leagueEnded && (
-              <button
-                onClick={openEditScore}
-                className="cursor-pointer px-4 py-1.5 rounded-lg text-sm"
-                style={{ background: "var(--surface-2)", color: "var(--muted)", border: "1px solid var(--border)" }}
-              >
-                Edit Score
-              </button>
+              <Button variant="ghost" size="sm" onClick={openEditScore}>Edit Score</Button>
             )}
           </div>
+        ) : leagueEnded ? (
+          <p className="text-sm text-center text-muted">
+            No result was recorded before the season ended.
+          </p>
         ) : (
-          <div className="flex flex-col gap-4">
+          <form onSubmit={handleSaveScore} className="flex flex-col gap-4">
             {!isPlayed && (
-              <div className="flex items-center gap-2 mb-1">
-                <span
-                  className="text-xs font-semibold px-2 py-0.5 rounded"
-                  style={{ background: "var(--surface-2)", color: "var(--muted)", border: "1px solid var(--border)" }}
-                >
-                  Upcoming
-                </span>
-              </div>
+              <span className="self-start text-xs font-semibold px-2 py-0.5 rounded bg-surface-2 text-muted border border-border">
+                Upcoming
+              </span>
             )}
-            {/* Score inputs */}
-            <div className="flex items-center justify-center gap-4">
-              <span className="text-base font-semibold w-36 text-right">{teamName(game.homeTeamId)}</span>
-              <input
-                type="number" min={0} placeholder="0"
+            {/* Score inputs: stacked on phones, side by side from sm up */}
+            <div className="grid grid-cols-[1fr_auto] sm:flex items-center justify-center gap-3 sm:gap-4">
+              <label htmlFor="home-score" className="text-base font-semibold sm:w-36 sm:text-right">{homeName}</label>
+              <Input
+                id="home-score"
+                type="number" min={0} inputMode="numeric" placeholder="0"
                 value={scoreForm.homeScore}
                 onChange={(e) => setScoreForm({ ...scoreForm, homeScore: e.target.value })}
-                className="w-20 px-3 py-2 rounded-lg text-lg text-center font-bold outline-none"
-                style={{ background: "var(--surface-2)", border: "1px solid var(--border)", color: "var(--foreground)" }}
+                className="w-20 text-lg text-center font-bold"
               />
-              <span className="text-xl font-bold" style={{ color: "var(--muted)" }}>–</span>
-              <input
-                type="number" min={0} placeholder="0"
+              <span aria-hidden="true" className="hidden sm:inline text-xl font-bold text-muted">–</span>
+              <label htmlFor="away-score" className="text-base font-semibold sm:w-36 sm:order-last">{awayName}</label>
+              <Input
+                id="away-score"
+                type="number" min={0} inputMode="numeric" placeholder="0"
                 value={scoreForm.awayScore}
                 onChange={(e) => setScoreForm({ ...scoreForm, awayScore: e.target.value })}
-                className="w-20 px-3 py-2 rounded-lg text-lg text-center font-bold outline-none"
-                style={{ background: "var(--surface-2)", border: "1px solid var(--border)", color: "var(--foreground)" }}
+                className="w-20 text-lg text-center font-bold"
               />
-              <span className="text-base font-semibold w-36">{teamName(game.awayTeamId)}</span>
             </div>
             {/* Sportsmanship */}
-            <div className="flex items-center justify-center gap-4 text-sm" style={{ color: "var(--muted)" }}>
-              <span className="text-xs">Sportsmanship (optional)</span>
-              <span className="text-xs">{teamName(game.homeTeamId)}</span>
-              <select
-                value={scoreForm.homeSport}
-                onChange={(e) => setScoreForm({ ...scoreForm, homeSport: e.target.value })}
-                className="px-2 py-1 rounded-lg text-xs outline-none"
-                style={{ background: "var(--surface-2)", border: "1px solid var(--border)", color: "var(--foreground)" }}
-              >
-                <option value="">—</option>
-                {[1,2,3,4,5].map((n) => <option key={n} value={n}>{n}</option>)}
-              </select>
-              <span className="text-xs">{teamName(game.awayTeamId)}</span>
-              <select
-                value={scoreForm.awaySport}
-                onChange={(e) => setScoreForm({ ...scoreForm, awaySport: e.target.value })}
-                className="px-2 py-1 rounded-lg text-xs outline-none"
-                style={{ background: "var(--surface-2)", border: "1px solid var(--border)", color: "var(--foreground)" }}
-              >
-                <option value="">—</option>
-                {[1,2,3,4,5].map((n) => <option key={n} value={n}>{n}</option>)}
-              </select>
-            </div>
+            <fieldset className="flex flex-wrap items-center justify-center gap-x-4 gap-y-2 text-xs text-muted">
+              <legend className="sr-only">Sportsmanship (optional)</legend>
+              <span aria-hidden="true">Sportsmanship (optional)</span>
+              {([
+                ["homeSport", homeName],
+                ["awaySport", awayName],
+              ] as const).map(([key, name]) => (
+                <label key={key} className="flex items-center gap-2">
+                  {name}
+                  <select
+                    value={scoreForm[key]}
+                    onChange={(e) => setScoreForm({ ...scoreForm, [key]: e.target.value })}
+                    className={`${inputClasses("default", true)} text-xs`}
+                  >
+                    <option value="">—</option>
+                    {[1, 2, 3, 4, 5].map((n) => <option key={n} value={n}>{n}</option>)}
+                  </select>
+                </label>
+              ))}
+            </fieldset>
             {/* Actions */}
             <div className="flex justify-center gap-3">
               {editingScore && (
-                <button
-                  onClick={() => setEditingScore(false)}
-                  className="cursor-pointer px-4 py-2 rounded-lg text-sm"
-                  style={{ background: "var(--surface-2)", color: "var(--muted)", border: "1px solid var(--border)" }}
-                >
-                  Cancel
-                </button>
+                <Button variant="ghost" onClick={() => setEditingScore(false)}>Cancel</Button>
               )}
-              <button
-                onClick={handleSaveScore}
-                disabled={savingScore || scoreForm.homeScore === "" || scoreForm.awayScore === ""}
-                className="cursor-pointer px-6 py-2 rounded-lg text-sm font-semibold disabled:opacity-50"
-                style={{ background: "var(--accent)", color: "#000" }}
-              >
-                {savingScore ? <><Spinner /> Saving…</> : isPlayed ? "Save Score" : "Record Result"}
-              </button>
+              <Button type="submit" disabled={!parsedScore} loading={savingScore} loadingText="Saving…" className="px-6">
+                {isPlayed ? "Save Score" : "Record Result"}
+              </Button>
             </div>
+          </form>
+        )}
+      </div>
+
+      {/* Date & location */}
+      <div className="rounded-xl px-4 sm:px-6 py-4 mb-8 bg-surface border border-border">
+        {editingDetails ? (
+          <form onSubmit={handleSaveDetails} className="flex flex-col sm:flex-row sm:items-end gap-3">
+            <div className="flex-1">
+              <label htmlFor="game-when" className="block text-xs text-muted mb-1">Date & time</label>
+              <Input
+                id="game-when"
+                type="datetime-local"
+                value={detailsForm.when}
+                onChange={(e) => setDetailsForm({ ...detailsForm, when: e.target.value })}
+                className="w-full"
+              />
+            </div>
+            <div className="flex-1">
+              <label htmlFor="game-location" className="block text-xs text-muted mb-1">Location</label>
+              <Input
+                id="game-location"
+                type="text"
+                placeholder="e.g. Court 2"
+                value={detailsForm.location}
+                onChange={(e) => setDetailsForm({ ...detailsForm, location: e.target.value })}
+                className="w-full"
+              />
+            </div>
+            <div className="flex gap-2">
+              <Button variant="ghost" onClick={() => setEditingDetails(false)}>Cancel</Button>
+              <Button type="submit" loading={savingDetails} loadingText="Saving…">Save</Button>
+            </div>
+          </form>
+        ) : (
+          <div className="flex flex-wrap items-center justify-between gap-3 text-sm">
+            <div className="flex flex-wrap gap-x-6 gap-y-1">
+              <span>
+                <span className="text-muted">When: </span>
+                {game.scheduledAt ? formatGameWhen(game.scheduledAt) : <span className="text-muted">Not set</span>}
+              </span>
+              <span>
+                <span className="text-muted">Where: </span>
+                {game.location || <span className="text-muted">Not set</span>}
+              </span>
+            </div>
+            {!leagueEnded && (
+              <Button variant="ghost" size="sm" onClick={openEditDetails}>
+                {game.scheduledAt || game.location ? "Edit" : "Add date & location"}
+              </Button>
+            )}
           </div>
         )}
       </div>
 
       {/* Stats section */}
       <div className="flex items-center justify-between mb-3">
-        <h2 className="font-semibold">Player Stats</h2>
+        <h3 className="font-semibold">Player Stats</h3>
         {!leagueEnded && (
           editingStats ? (
             <div className="flex gap-2">
-              <button
-                onClick={() => setEditingStats(false)}
-                className="cursor-pointer px-3 py-1.5 rounded-lg text-sm"
-                style={{ background: "var(--surface-2)", color: "var(--muted)", border: "1px solid var(--border)" }}
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleSaveStats}
-                disabled={savingStats}
-                className="cursor-pointer px-4 py-1.5 rounded-lg text-sm font-semibold disabled:opacity-50"
-                style={{ background: "var(--accent)", color: "#000" }}
-              >
-                {savingStats ? <><Spinner /> Saving…</> : "Save Stats"}
-              </button>
+              <Button variant="ghost" size="sm" onClick={() => setEditingStats(false)}>Cancel</Button>
+              <Button size="sm" onClick={handleSaveStats} loading={savingStats} loadingText="Saving…">
+                Save Stats
+              </Button>
             </div>
           ) : (
-            <button
-              onClick={startEditStats}
-              className="cursor-pointer px-4 py-1.5 rounded-lg text-sm font-semibold"
-              style={{ background: "var(--surface-2)", color: "var(--accent)", border: "1px solid var(--accent)" }}
-            >
+            <Button variant="secondary" size="sm" onClick={startEditStats}>
               {(game.statLines ?? []).length > 0 ? "Edit Stats" : "Enter Stats"}
-            </button>
+            </Button>
           )
         )}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {[
-          { label: teamName(game.homeTeamId), players: homePlayers },
-          { label: teamName(game.awayTeamId), players: awayPlayers },
+          { label: homeName, players: homePlayers },
+          { label: awayName, players: awayPlayers },
         ].map(({ label, players }) => (
-          <div key={label} className="rounded-xl overflow-hidden" style={{ border: "1px solid var(--border)" }}>
-            <div
-              className="px-4 py-3 text-sm font-semibold"
-              style={{ background: "var(--surface-2)", borderBottom: "1px solid var(--border)" }}
-            >
+          <div key={label} className="rounded-xl overflow-hidden border border-border">
+            <div className="px-4 py-3 text-sm font-semibold bg-surface-2 border-b border-border">
               {label}
             </div>
             {players.length === 0 ? (
-              <div className="py-8 text-center text-sm" style={{ color: "var(--muted)" }}>
+              <div className="py-8 text-center text-sm text-muted">
                 No players on this roster.
               </div>
             ) : (
-              <StatGrid
-                rows={players.map((player) => ({ player }))}
-                game={game}
-                sportConfig={sportConfig}
-                editing={editingStats}
-                draft={draftStats}
-                onDraftChange={(playerId, k, value) =>
-                  setDraftStats((prev) => ({ ...prev, [playerId]: { ...prev[playerId], [k]: value } }))
-                }
-                dense
-              />
+              <div className="overflow-x-auto">
+                <StatGrid
+                  rows={players.map((player) => ({ player }))}
+                  game={game}
+                  sportConfig={sportConfig}
+                  editing={editingStats}
+                  draft={draftStats}
+                  onDraftChange={(playerId, k, value) =>
+                    setDraftStats((prev) => ({ ...prev, [playerId]: { ...prev[playerId], [k]: value } }))
+                  }
+                  dense
+                />
+              </div>
             )}
           </div>
         ))}
