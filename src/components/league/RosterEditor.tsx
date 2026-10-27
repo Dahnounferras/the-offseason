@@ -67,7 +67,8 @@ export default function RosterEditor({ leagueId, team, onClose }: RosterEditorPr
                   </span>
                   <button
                     onClick={() => roster.startEdit(p)}
-                    className="cursor-pointer opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity px-2 py-1 rounded text-xs text-muted bg-surface"
+                    aria-label={`Edit ${p.firstName} ${p.lastName}`}
+                    className="cursor-pointer opacity-60 group-hover:opacity-100 focus:opacity-100 transition-opacity px-2 py-1 rounded text-xs text-muted bg-surface"
                   >
                     Edit
                   </button>

@@ -140,7 +140,8 @@ export default function TeamDetailPage() {
                         <span>{player.firstName} {player.lastName}</span>
                         <button
                           onClick={() => roster.startEdit(player)}
-                          className="cursor-pointer opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity px-2 py-0.5 rounded text-xs"
+                          aria-label={`Edit ${player.firstName} ${player.lastName}`}
+                          className="cursor-pointer opacity-60 group-hover:opacity-100 focus:opacity-100 transition-opacity px-2 py-0.5 rounded text-xs"
                           style={{ color: "var(--muted)", background: "var(--surface)" }}
                         >
                           Edit
@@ -163,6 +164,7 @@ export default function TeamDetailPage() {
                         className="cursor-pointer p-1.5 rounded-lg disabled:opacity-30 hover:opacity-70 transition-opacity"
                         style={{ color: "var(--loss)" }}
                         title="Remove player"
+                        aria-label={`Remove ${player.firstName} ${player.lastName}`}
                       >
                         <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                           <polyline points="3 6 5 6 21 6" />

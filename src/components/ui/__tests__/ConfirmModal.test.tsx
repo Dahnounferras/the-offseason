@@ -52,4 +52,16 @@ describe("ConfirmModal", () => {
     await user.keyboard("{Escape}");
     expect(onCancel).not.toHaveBeenCalled();
   });
+
+  it("focuses Cancel first, the safe choice", () => {
+    renderModal();
+    expect(screen.getByRole("button", { name: "Cancel" })).toHaveFocus();
+  });
+
+  it("ignores a backdrop click while busy", async () => {
+    const user = userEvent.setup();
+    const { onCancel } = renderModal({ busy: true });
+    await user.click(screen.getByRole("dialog").parentElement!);
+    expect(onCancel).not.toHaveBeenCalled();
+  });
 });
