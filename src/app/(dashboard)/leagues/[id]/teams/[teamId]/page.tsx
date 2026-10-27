@@ -27,8 +27,7 @@ export default function TeamDetailPage() {
 
   async function handleDeletePlayer() {
     if (!confirmDeletePlayer) return;
-    await roster.remove(confirmDeletePlayer);
-    setConfirmDeletePlayer(null);
+    if (await roster.remove(confirmDeletePlayer)) setConfirmDeletePlayer(null);
   }
 
   const team = teams.find((t) => t.id === teamId) ?? null;

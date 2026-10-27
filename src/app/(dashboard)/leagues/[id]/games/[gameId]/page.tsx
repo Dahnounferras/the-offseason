@@ -11,6 +11,8 @@ import {
 } from "@/lib/firestore/leagues";
 import type { Game, Player } from "@/types";
 import { useLeague } from "@/hooks/useLeague";
+import { useToast } from "@/components/ui/Toast";
+import { errorMessage } from "@/lib/errors";
 import { getSportConfig } from "@/lib/sportConfig";
 import Spinner from "@/components/Spinner";
 import { buildStatDraft, draftToStatLines, type StatDraft } from "@/lib/stats";
@@ -20,6 +22,7 @@ import { sortByJersey } from "@/lib/roster";
 export default function GameDetailPage() {
   const { id, gameId } = useParams<{ id: string; gameId: string }>();
   const { league, teams, games, setGames } = useLeague();
+  const toast = useToast();
   const game = games.find((g) => g.id === gameId) ?? null;
   const homeTeamId = game?.homeTeamId;
   const awayTeamId = game?.awayTeamId;
@@ -41,8 +44,8 @@ export default function GameDetailPage() {
     Promise.all([getPlayers(id, homeTeamId), getPlayers(id, awayTeamId)]).then(([hp, ap]) => {
       setHomePlayers(sortByJersey(hp));
       setAwayPlayers(sortByJersey(ap));
-    });
-  }, [id, homeTeamId, awayTeamId]);
+    }).catch((err) => toast.error(errorMessage(err)));
+  }, [id, homeTeamId, awayTeamId, toast]);
 
   // Writes land in the shared games list so the games, stats and standings tabs see them too.
   function patchGame(patch: Partial<Game>) {
@@ -76,10 +79,12 @@ export default function GameDetailPage() {
         await updateResult(id, game.id, hs, as, homeSport, awaySport);
         patchGame({ homeScore: hs, awayScore: as, homeSportsmanship: homeSport, awaySportsmanship: awaySport });
       } else {
-        await recordResult(id, game.id, hs, as, homeSport, awaySport);
-        patchGame({ status: "played", homeScore: hs, awayScore: as, homeSportsmanship: homeSport, awaySportsmanship: awaySport, playedAt: Date.now() });
+        const playedAt = await recordResult(id, game.id, hs, as, homeSport, awaySport);
+        patchGame({ status: "played", homeScore: hs, awayScore: as, homeSportsmanship: homeSport, awaySportsmanship: awaySport, playedAt });
       }
       setEditingScore(false);
+    } catch (err) {
+      toast.error(errorMessage(err));
     } finally {
       setSavingScore(false);
     }
@@ -107,6 +112,8 @@ export default function GameDetailPage() {
       await saveGameStatLines(id, game.id, statLines);
       patchGame({ statLines });
       setEditingStats(false);
+    } catch (err) {
+      toast.error(errorMessage(err));
     } finally {
       setSavingStats(false);
     }

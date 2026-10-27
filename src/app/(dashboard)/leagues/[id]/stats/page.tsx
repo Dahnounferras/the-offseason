@@ -6,6 +6,8 @@ import Link from "next/link";
 import { getPlayers, saveGameStatLines } from "@/lib/firestore/leagues";
 import type { Game, Player } from "@/types";
 import { useLeague } from "@/hooks/useLeague";
+import { useToast } from "@/components/ui/Toast";
+import { errorMessage } from "@/lib/errors";
 import { getSportConfig } from "@/lib/sportConfig";
 import Spinner from "@/components/Spinner";
 import { computeSeasonTotals, buildStatDraft, draftToStatLines, type StatDraft } from "@/lib/stats";
@@ -17,6 +19,7 @@ type PlayerInfo = { player: Player; teamName: string };
 export default function StatsPage() {
   const { id } = useParams<{ id: string }>();
   const { league, teams, games, setGames } = useLeague();
+  const toast = useToast();
   const [playerMap, setPlayerMap] = useState<Map<string, PlayerInfo>>(new Map());
   const [activeTab, setActiveTab] = useState<"season" | "game">("season");
   const [selectedGameId, setSelectedGameId] = useState<string | null>(null);
@@ -90,6 +93,8 @@ export default function StatsPage() {
         prev.map((g) => (g.id === selectedGame.id ? { ...g, statLines } : g))
       );
       setEditingStats(false);
+    } catch (err) {
+      toast.error(errorMessage(err));
     } finally {
       setSavingStats(false);
     }

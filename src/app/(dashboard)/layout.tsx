@@ -7,6 +7,7 @@ import Image from "next/image";
 import { signOut } from "firebase/auth";
 import { auth } from "@/lib/firebase";
 import { useAuth } from "@/hooks/useAuth";
+import { ToastProvider } from "@/components/ui/Toast";
 
 export default function DashboardLayout({
   children,
@@ -31,33 +32,35 @@ export default function DashboardLayout({
   }
 
   return (
-    <div className="min-h-screen flex flex-col">
-      <nav
-        className="flex items-center justify-between px-6 py-4 border-b"
-        style={{ background: "var(--surface)", borderColor: "var(--border)" }}
-      >
-        <Link
-          href="/"
-          className="font-bold text-lg"
-          style={{ display: "flex", alignItems: "center", gap: 8, textDecoration: "none", color: "var(--foreground)" }}
+    <ToastProvider>
+      <div className="min-h-screen flex flex-col">
+        <nav
+          className="flex items-center justify-between px-6 py-4 border-b"
+          style={{ background: "var(--surface)", borderColor: "var(--border)" }}
         >
-          <Image src="/logo.png" alt="" width={28} height={28} style={{ borderRadius: 7 }} />
-          The Offseason
-        </Link>
-        <div className="flex items-center gap-4">
-          <span className="text-sm" style={{ color: "var(--muted)" }}>
-            {user.displayName}
-          </span>
-          <button
-            onClick={() => signOut(auth).then(() => router.push("/login"))}
-            className="cursor-pointer text-sm px-3 py-1 rounded-lg transition-colors hover:opacity-80"
-            style={{ background: "var(--surface-2)", color: "var(--muted)" }}
+          <Link
+            href="/"
+            className="font-bold text-lg"
+            style={{ display: "flex", alignItems: "center", gap: 8, textDecoration: "none", color: "var(--foreground)" }}
           >
-            Sign out
-          </button>
-        </div>
-      </nav>
-      <main className="flex-1 p-6 max-w-5xl mx-auto w-full">{children}</main>
-    </div>
+            <Image src="/logo.png" alt="" width={28} height={28} style={{ borderRadius: 7 }} />
+            The Offseason
+          </Link>
+          <div className="flex items-center gap-4">
+            <span className="text-sm" style={{ color: "var(--muted)" }}>
+              {user.displayName}
+            </span>
+            <button
+              onClick={() => signOut(auth).then(() => router.push("/login"))}
+              className="cursor-pointer text-sm px-3 py-1 rounded-lg transition-colors hover:opacity-80"
+              style={{ background: "var(--surface-2)", color: "var(--muted)" }}
+            >
+              Sign out
+            </button>
+          </div>
+        </nav>
+        <main className="flex-1 p-6 max-w-5xl mx-auto w-full">{children}</main>
+      </div>
+    </ToastProvider>
   );
 }

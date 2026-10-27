@@ -8,6 +8,8 @@ import { getUserLeagues, createLeague } from "@/lib/firestore/leagues";
 import Button from "@/components/ui/Button";
 import Input, { inputClasses } from "@/components/ui/Input";
 import Modal from "@/components/ui/Modal";
+import { useToast } from "@/components/ui/Toast";
+import { errorMessage } from "@/lib/errors";
 import type { League } from "@/types";
 
 const SPORTS = ["Basketball", "Soccer", "Softball", "Football", "Volleyball", "Hockey", "Other"];
@@ -19,25 +21,33 @@ export default function DashboardPage() {
   const [showCreate, setShowCreate] = useState(false);
   const [form, setForm] = useState({ name: "", sport: "Basketball", totalGames: 10, customSport: "" });
   const [saving, setSaving] = useState(false);
+  const toast = useToast();
 
   useEffect(() => {
     if (user) {
-      getUserLeagues(user.uid).then(setLeagues);
+      getUserLeagues(user.uid)
+        .then(setLeagues)
+        .catch((err) => toast.error(errorMessage(err)));
     }
-  }, [user]);
+  }, [user, toast]);
 
   async function handleCreate() {
     if (!user || !form.name.trim()) return;
     setSaving(true);
-    const id = await createLeague({
-      name: form.name.trim(),
-      sport: form.sport === "Other" ? form.customSport.trim() || "Other" : form.sport,
-      ownerId: user.uid,
-      season: { totalGames: form.totalGames },
-      scoringRules: { win: 2, tie: 1, loss: 0 },
-      isPublic: false,
-    });
-    router.push(`/leagues/${id}`);
+    try {
+      const id = await createLeague({
+        name: form.name.trim(),
+        sport: form.sport === "Other" ? form.customSport.trim() || "Other" : form.sport,
+        ownerId: user.uid,
+        season: { totalGames: form.totalGames },
+        scoringRules: { win: 2, tie: 1, loss: 0 },
+        isPublic: false,
+      });
+      router.push(`/leagues/${id}`);
+    } catch (err) {
+      toast.error(errorMessage(err));
+      setSaving(false);
+    }
   }
 
   const activeLeagues = leagues.filter((l) => !l.status || l.status === "active");

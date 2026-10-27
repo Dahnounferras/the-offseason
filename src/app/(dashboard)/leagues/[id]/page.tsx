@@ -4,9 +4,11 @@ import { useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { getTeams, getGames, addTeam, scheduleGames, endLeague, deleteLeague, reactivateLeague, resetLeague } from "@/lib/firestore/leagues";
+import { addTeam, scheduleGames, endLeague, deleteLeague, reactivateLeague, resetLeague } from "@/lib/firestore/leagues";
 import type { Team } from "@/types";
 import { useLeague } from "@/hooks/useLeague";
+import { useToast } from "@/components/ui/Toast";
+import { errorMessage } from "@/lib/errors";
 import { generateSchedule } from "@/lib/schedule";
 import { computeStandings } from "@/lib/standings";
 import Spinner from "@/components/Spinner";
@@ -22,6 +24,7 @@ export default function LeaguePage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const { league, teams, games, bracket, setLeague, setTeams, setGames, setBracket } = useLeague();
+  const toast = useToast();
   const [newTeamName, setNewTeamName] = useState("");
   const [addingTeam, setAddingTeam] = useState(false);
   const [rosterTeam, setRosterTeam] = useState<Team | null>(null);
@@ -36,9 +39,12 @@ export default function LeaguePage() {
     if (!newTeamName.trim()) return;
     setAddingTeam(true);
     try {
-      await addTeam(id, newTeamName.trim());
-      setTeams(await getTeams(id));
+      const name = newTeamName.trim();
+      const teamId = await addTeam(id, name);
+      setTeams((prev) => [...prev, { id: teamId, name }]);
       setNewTeamName("");
+    } catch (err) {
+      toast.error(errorMessage(err));
     } finally {
       setAddingTeam(false);
     }
@@ -49,8 +55,9 @@ export default function LeaguePage() {
     setStarting(true);
     try {
       const matchups = generateSchedule(teams.map((t) => t.id), league.season.totalGames);
-      await scheduleGames(id, matchups.map((m, i) => ({ ...m, gameNumber: i + 1 })));
-      setGames(await getGames(id));
+      setGames(await scheduleGames(id, matchups.map((m, i) => ({ ...m, gameNumber: i + 1 }))));
+    } catch (err) {
+      toast.error(errorMessage(err));
     } finally {
       setStarting(false);
     }
@@ -62,6 +69,8 @@ export default function LeaguePage() {
     try {
       await endLeague(id);
       router.push("/dashboard");
+    } catch (err) {
+      toast.error(errorMessage(err));
     } finally {
       setActioning(false);
     }
@@ -72,6 +81,8 @@ export default function LeaguePage() {
     try {
       await deleteLeague(id);
       router.push("/dashboard");
+    } catch (err) {
+      toast.error(errorMessage(err));
     } finally {
       setActioning(false);
     }
@@ -84,6 +95,9 @@ export default function LeaguePage() {
       setGames([]);
       setBracket(null);
       setShowResetModal(false);
+      toast.success("League reset. Teams and rosters were kept.");
+    } catch (err) {
+      toast.error(errorMessage(err));
     } finally {
       setActioning(false);
     }
@@ -95,6 +109,8 @@ export default function LeaguePage() {
       await reactivateLeague(id);
       setLeague((l) => ({ ...l, status: "active" }));
       setShowReactivateModal(false);
+    } catch (err) {
+      toast.error(errorMessage(err));
     } finally {
       setActioning(false);
     }

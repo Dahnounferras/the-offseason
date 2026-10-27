@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { act, renderHook } from "@testing-library/react";
-import { useState } from "react";
+import { act, renderHook, screen } from "@testing-library/react";
+import { createElement, useState } from "react";
+import { ToastProvider } from "@/components/ui/Toast";
 import { addPlayer, updatePlayer, deletePlayer } from "@/lib/firestore/leagues";
 import { useRoster } from "@/hooks/useRoster";
 import type { Player } from "@/types";
@@ -16,10 +17,13 @@ beforeEach(() => vi.clearAllMocks());
 const ann: Player = { id: "p1", firstName: "Ann", lastName: "Lee", jerseyNumber: 7, teamId: "A" };
 
 function setup(initial: Player[] = [ann]) {
-  return renderHook(() => {
-    const [players, setPlayers] = useState(initial);
-    return { players, roster: useRoster("L", "A", players, setPlayers) };
-  });
+  return renderHook(
+    () => {
+      const [players, setPlayers] = useState(initial);
+      return { players, roster: useRoster("L", "A", players, setPlayers) };
+    },
+    { wrapper: ({ children }) => createElement(ToastProvider, null, children) }
+  );
 }
 
 describe("useRoster", () => {
@@ -64,12 +68,22 @@ describe("useRoster", () => {
     expect(result.current.roster.removingId).toBeNull();
   });
 
-  it("resets the busy flag when a write fails", async () => {
-    vi.mocked(addPlayer).mockRejectedValue(new Error("permission-denied"));
+  it("shows an error toast and resets the busy flag when a write fails", async () => {
+    vi.mocked(addPlayer).mockRejectedValue({ code: "permission-denied" });
     const { result } = setup();
     act(() => result.current.roster.setAddForm({ firstName: "Bob", lastName: "Ray", jerseyNumber: "" }));
-    await act(() => result.current.roster.add().catch(() => {}));
+    await act(() => result.current.roster.add());
     expect(result.current.roster.adding).toBe(false);
+    expect(result.current.players).toHaveLength(1);
+    expect(screen.getByRole("alert")).toHaveTextContent(/permission/);
+  });
+
+  it("reports whether a remove succeeded", async () => {
+    vi.mocked(deletePlayer).mockRejectedValue(new Error("offline"));
+    const { result } = setup();
+    let removed = true;
+    await act(async () => { removed = await result.current.roster.remove(ann); });
+    expect(removed).toBe(false);
     expect(result.current.players).toHaveLength(1);
   });
 });

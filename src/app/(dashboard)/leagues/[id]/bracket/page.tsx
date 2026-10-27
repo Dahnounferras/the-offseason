@@ -6,6 +6,8 @@ import Link from "next/link";
 import { saveBracket, deleteBracket, updateBracket } from "@/lib/firestore/leagues";
 import type { Bracket } from "@/types";
 import { useLeague } from "@/hooks/useLeague";
+import { useToast } from "@/components/ui/Toast";
+import { errorMessage } from "@/lib/errors";
 import { computeSeedings, generateBracket, advanceWinner, clearResults } from "@/lib/bracket";
 import { championId, countRemaining } from "@/lib/bracketLayout";
 import Spinner from "@/components/Spinner";
@@ -15,6 +17,7 @@ import BracketView from "@/components/league/BracketView";
 export default function BracketPage() {
   const { id } = useParams<{ id: string }>();
   const { league, teams, games, bracket, setBracket } = useLeague();
+  const toast = useToast();
   const [generating, setGenerating] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -34,6 +37,8 @@ export default function BracketPage() {
       const newBracket: Omit<Bracket, "id"> = { rounds, generatedAt: Date.now(), status: "active" };
       const bracketId = await saveBracket(id, newBracket);
       setBracket({ id: bracketId, ...newBracket });
+    } catch (err) {
+      toast.error(errorMessage(err));
     } finally {
       setGenerating(false);
     }
@@ -46,6 +51,8 @@ export default function BracketPage() {
       await deleteBracket(id, bracket.id);
       setBracket(null);
       setShowDeleteModal(false);
+    } catch (err) {
+      toast.error(errorMessage(err));
     } finally {
       setDeleting(false);
     }
@@ -55,8 +62,14 @@ export default function BracketPage() {
     if (!bracket) return;
     const rounds = advanceWinner(bracket.rounds, roundIdx, matchIdx, winnerId);
     if (!rounds) return;
+    // Optimistic: show the pick at once, and put the old rounds back if the write fails.
     setBracket({ ...bracket, rounds });
-    await updateBracket(id, bracket.id, rounds);
+    try {
+      await updateBracket(id, bracket.id, rounds);
+    } catch (err) {
+      setBracket(bracket);
+      toast.error(errorMessage(err));
+    }
   }
 
   async function handleReset() {
@@ -66,6 +79,9 @@ export default function BracketPage() {
       const rounds = clearResults(bracket.rounds);
       setBracket({ ...bracket, rounds });
       await updateBracket(id, bracket.id, rounds);
+    } catch (err) {
+      setBracket(bracket);
+      toast.error(errorMessage(err));
     } finally {
       setResetting(false);
     }

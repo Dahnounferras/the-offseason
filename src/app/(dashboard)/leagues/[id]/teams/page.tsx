@@ -3,9 +3,11 @@
 import { useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import { getTeams, addTeam, deleteTeam } from "@/lib/firestore/leagues";
+import { addTeam, deleteTeam } from "@/lib/firestore/leagues";
 import type { Team } from "@/types";
 import { useLeague } from "@/hooks/useLeague";
+import { useToast } from "@/components/ui/Toast";
+import { errorMessage } from "@/lib/errors";
 import { computeStandings } from "@/lib/standings";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
@@ -15,6 +17,7 @@ import ConfirmModal from "@/components/ui/ConfirmModal";
 export default function TeamsPage() {
   const { id } = useParams<{ id: string }>();
   const { league, teams, games, setTeams, setGames } = useLeague();
+  const toast = useToast();
   const [newTeamName, setNewTeamName] = useState("");
   const [addingTeam, setAddingTeam] = useState(false);
   const [confirmDeleteTeam, setConfirmDeleteTeam] = useState<Team | null>(null);
@@ -25,10 +28,12 @@ export default function TeamsPage() {
     if (!newTeamName.trim()) return;
     setAddingTeam(true);
     try {
-      await addTeam(id, newTeamName.trim());
-      const updated = await getTeams(id);
-      setTeams(updated);
+      const name = newTeamName.trim();
+      const teamId = await addTeam(id, name);
+      setTeams((prev) => [...prev, { id: teamId, name }]);
       setNewTeamName("");
+    } catch (err) {
+      toast.error(errorMessage(err));
     } finally {
       setAddingTeam(false);
     }
@@ -45,6 +50,8 @@ export default function TeamsPage() {
       // deleteTeam also deleted every game this team played.
       setGames((prev) => prev.filter((g) => g.homeTeamId !== teamId && g.awayTeamId !== teamId));
       setConfirmDeleteTeam(null);
+    } catch (err) {
+      toast.error(errorMessage(err));
     } finally {
       setDeletingTeamId(null);
       setDeletingModal(false);
