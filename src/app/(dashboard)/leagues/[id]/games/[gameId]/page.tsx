@@ -1,15 +1,14 @@
 "use client";
 
-import { useEffect, useState, useMemo } from "react";
+import { useState, useMemo } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import {
-  getPlayers,
   recordResult,
   updateResult,
   saveGameStatLines,
 } from "@/lib/firestore/leagues";
-import type { Game, Player } from "@/types";
+import type { Game } from "@/types";
 import { useLeague } from "@/hooks/useLeague";
 import { useToast } from "@/components/ui/Toast";
 import { errorMessage } from "@/lib/errors";
@@ -21,13 +20,11 @@ import { sortByJersey } from "@/lib/roster";
 
 export default function GameDetailPage() {
   const { id, gameId } = useParams<{ id: string; gameId: string }>();
-  const { league, teams, games, setGames } = useLeague();
+  const { league, teams, games, players, setGames } = useLeague();
   const toast = useToast();
   const game = games.find((g) => g.id === gameId) ?? null;
-  const homeTeamId = game?.homeTeamId;
-  const awayTeamId = game?.awayTeamId;
-  const [homePlayers, setHomePlayers] = useState<Player[]>([]);
-  const [awayPlayers, setAwayPlayers] = useState<Player[]>([]);
+  const homePlayers = useMemo(() => (game ? sortByJersey(players[game.homeTeamId] ?? []) : []), [players, game]);
+  const awayPlayers = useMemo(() => (game ? sortByJersey(players[game.awayTeamId] ?? []) : []), [players, game]);
 
   // Score state
   const [editingScore, setEditingScore] = useState(false);
@@ -38,14 +35,6 @@ export default function GameDetailPage() {
   const [editingStats, setEditingStats] = useState(false);
   const [draftStats, setDraftStats] = useState<StatDraft>({});
   const [savingStats, setSavingStats] = useState(false);
-
-  useEffect(() => {
-    if (!homeTeamId || !awayTeamId) return;
-    Promise.all([getPlayers(id, homeTeamId), getPlayers(id, awayTeamId)]).then(([hp, ap]) => {
-      setHomePlayers(sortByJersey(hp));
-      setAwayPlayers(sortByJersey(ap));
-    }).catch((err) => toast.error(errorMessage(err)));
-  }, [id, homeTeamId, awayTeamId, toast]);
 
   // Writes land in the shared games list so the games, stats and standings tabs see them too.
   function patchGame(patch: Partial<Game>) {

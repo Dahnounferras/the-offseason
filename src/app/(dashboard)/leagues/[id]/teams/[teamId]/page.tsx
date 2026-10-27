@@ -1,11 +1,10 @@
 "use client";
 
-import { useEffect, useState, useMemo } from "react";
+import { useState, useMemo } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import { getPlayers } from "@/lib/firestore/leagues";
 import type { Player } from "@/types";
-import { useLeague } from "@/hooks/useLeague";
+import { useLeague, useTeamPlayers } from "@/hooks/useLeague";
 import { computeStandings } from "@/lib/standings";
 import { getSportConfig } from "@/lib/sportConfig";
 import ConfirmModal from "@/components/ui/ConfirmModal";
@@ -17,13 +16,9 @@ import { useRoster } from "@/hooks/useRoster";
 export default function TeamDetailPage() {
   const { id, teamId } = useParams<{ id: string; teamId: string }>();
   const { league, teams, games } = useLeague();
-  const [players, setPlayers] = useState<Player[]>([]);
+  const [players, setPlayers] = useTeamPlayers(teamId);
   const [confirmDeletePlayer, setConfirmDeletePlayer] = useState<Player | null>(null);
   const roster = useRoster(id, teamId, players, setPlayers);
-
-  useEffect(() => {
-    getPlayers(id, teamId).then(setPlayers);
-  }, [id, teamId]);
 
   async function handleDeletePlayer() {
     if (!confirmDeletePlayer) return;

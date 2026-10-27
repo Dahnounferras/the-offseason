@@ -16,15 +16,38 @@ import Input from "@/components/ui/Input";
 import StandingsTable from "@/components/league/StandingsTable";
 import BracketView from "@/components/league/BracketView";
 import RosterEditor from "@/components/league/RosterEditor";
+import SetupChecklist from "@/components/league/SetupChecklist";
+import { setupSteps } from "@/lib/setup";
+
+const checklistKey = (leagueId: string) => `setup-hidden:${leagueId}`;
+
+function readChecklistHidden(leagueId: string): boolean {
+  try {
+    return localStorage.getItem(checklistKey(leagueId)) === "1";
+  } catch {
+    return false;
+  }
+}
 
 export default function LeaguePage() {
   const { id } = useParams<{ id: string }>();
-  const { league, teams, games, bracket, setTeams, setGames } = useLeague();
+  const { league, teams, games, bracket, players, setTeams, setGames } = useLeague();
   const toast = useToast();
   const [newTeamName, setNewTeamName] = useState("");
   const [addingTeam, setAddingTeam] = useState(false);
   const [rosterTeam, setRosterTeam] = useState<Team | null>(null);
   const [starting, setStarting] = useState(false);
+  // The provider only renders pages on the client, after loading, so storage is safe to read here.
+  const [checklistHidden, setChecklistHidden] = useState(() => readChecklistHidden(id));
+
+  function hideChecklist() {
+    setChecklistHidden(true);
+    try {
+      localStorage.setItem(checklistKey(id), "1");
+    } catch {
+      // Storage can be unavailable (private mode); hiding still works for this visit.
+    }
+  }
 
   async function handleAddTeam() {
     if (!newTeamName.trim()) return;
@@ -55,27 +78,19 @@ export default function LeaguePage() {
   }
 
   const standings = computeStandings(teams, games, league.scoringRules);
+  const steps = setupSteps({ teams, players, games, bracket });
+  const showChecklist = !checklistHidden && league.status !== "ended" && steps.some((s) => !s.done);
 
   return (
     <div>
-      {games.length === 0 && league.status !== "ended" && teams.length >= 2 && (
-        <div className="mb-6">
-          <Button onClick={handleStartLeague} loading={starting} loadingText="Generating…">
-            Start League
-          </Button>
-        </div>
-      )}
-
-      {games.length === 0 && teams.length < 2 && league.status !== "ended" && (
-        <div
-          className="mb-6 px-4 py-3 rounded-xl text-sm flex items-center gap-3"
-          style={{ background: "var(--surface-2)", border: "1px solid var(--border)", color: "var(--muted)" }}
-        >
-          <span style={{ color: "var(--accent)", fontSize: "1.1rem" }}>ⓘ</span>
-          <span>
-            Add at least <strong style={{ color: "var(--foreground)" }}>2 teams</strong> before starting the league — the schedule can&apos;t be generated without them.
-          </span>
-        </div>
+      {showChecklist && (
+        <SetupChecklist
+          leagueId={id}
+          steps={steps}
+          onStart={handleStartLeague}
+          starting={starting}
+          onHide={hideChecklist}
+        />
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

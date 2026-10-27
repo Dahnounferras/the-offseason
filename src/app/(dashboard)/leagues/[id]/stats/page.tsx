@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useState, useMemo } from "react";
+import { useState, useMemo } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import { getPlayers, saveGameStatLines } from "@/lib/firestore/leagues";
+import { saveGameStatLines } from "@/lib/firestore/leagues";
 import type { Game, Player } from "@/types";
 import { useLeague } from "@/hooks/useLeague";
 import { useToast } from "@/components/ui/Toast";
@@ -18,28 +18,23 @@ type PlayerInfo = { player: Player; teamName: string };
 
 export default function StatsPage() {
   const { id } = useParams<{ id: string }>();
-  const { league, teams, games, setGames } = useLeague();
+  const { league, teams, games, players, setGames } = useLeague();
   const toast = useToast();
-  const [playerMap, setPlayerMap] = useState<Map<string, PlayerInfo>>(new Map());
   const [activeTab, setActiveTab] = useState<"season" | "game">("season");
   const [selectedGameId, setSelectedGameId] = useState<string | null>(null);
   const [editingStats, setEditingStats] = useState(false);
   const [draftStats, setDraftStats] = useState<StatDraft>({});
   const [savingStats, setSavingStats] = useState(false);
 
-  useEffect(() => {
-    Promise.all(
-      teams.map((team) => getPlayers(id, team.id).then((ps) => ({ team, players: ps })))
-    ).then((allPlayers) => {
-      const map = new Map<string, PlayerInfo>();
-      for (const { team, players } of allPlayers) {
-        for (const player of players) {
-          map.set(player.id, { player, teamName: team.name });
-        }
+  const playerMap = useMemo(() => {
+    const map = new Map<string, PlayerInfo>();
+    for (const team of teams) {
+      for (const player of players[team.id] ?? []) {
+        map.set(player.id, { player, teamName: team.name });
       }
-      setPlayerMap(map);
-    });
-  }, [id, teams]);
+    }
+    return map;
+  }, [teams, players]);
 
   const sportConfig = useMemo(
     () => getSportConfig(league.sport),
